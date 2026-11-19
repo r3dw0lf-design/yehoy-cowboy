@@ -36,5 +36,11 @@ export const api = {
   cancel: (id) => req("POST", `/duels/${id}/cancel`),
   ready: (id, ready) => req("POST", `/duels/${id}/ready`, { ready }),
   duel: (id) => req("GET", `/duels/${id}`),
+  armory: () => req("GET", "/armory"),
+  buy: (gun) => req("POST", "/shop/buy", { gun }),
+  upgrade: (gun) => req("POST", "/shop/upgrade", { gun }),
+  skin: (gun, skin) => req("POST", "/armory/skin", { gun, skin }),
+  equip: (gun) => req("POST", "/armory/equip", { gun }),
+  duelGun: (id, gun) => req("POST", `/duels/${id}/gun`, { gun }),
   duelScore: (id, score, final = false) => req("POST", `/duels/${id}/score`, { score, final }),
 };

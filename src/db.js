@@ -49,16 +49,49 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_duels_opponent ON duels(opponent_id, status)`,
 ];
 
+const EXTRA_TABLES = [
+  `CREATE TABLE IF NOT EXISTS user_guns (
+    user_id INTEGER NOT NULL,
+    gun_id TEXT NOT NULL,
+    level INTEGER NOT NULL DEFAULT 1,
+    skin TEXT NOT NULL DEFAULT 'classic',
+    skins TEXT NOT NULL DEFAULT 'classic',
+    PRIMARY KEY (user_id, gun_id)
+  )`,
+];
+
+// Columns added after the first release. Existing databases get them via ALTER.
+const NEW_COLUMNS = [
+  ["users", "coins", "INTEGER NOT NULL DEFAULT 0"],
+  ["users", "equipped", "TEXT NOT NULL DEFAULT 'rifle'"],
+  ["duels", "gun", "TEXT NOT NULL DEFAULT 'rifle'"],
+];
+
 let ready = null;
+
+async function migrate(db) {
+  await db.batch([...SCHEMA, ...EXTRA_TABLES].map((s) => db.prepare(s)));
+  const have = {};
+  for (const table of ["users", "duels"]) {
+    const info = await db.prepare(`PRAGMA table_info(${table})`).all();
+    have[table] = new Set(info.results.map((r) => r.name));
+  }
+  for (const [table, col, def] of NEW_COLUMNS) {
+    if (have[table].has(col)) continue;
+    try {
+      await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`).run();
+    } catch (e) {
+      if (!/duplicate column/i.test(String(e.message))) throw e; // another request added it first
+    }
+  }
+}
 
 export function ensureSchema(db) {
   if (!ready) {
-    ready = db
-      .batch(SCHEMA.map((s) => db.prepare(s)))
-      .catch((e) => {
-        ready = null; // try again next request
-        throw e;
-      });
+    ready = migrate(db).catch((e) => {
+      ready = null; // try again next request
+      throw e;
+    });
   }
   return ready;
 }

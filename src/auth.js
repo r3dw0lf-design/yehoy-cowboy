@@ -59,6 +59,8 @@ export function publicUser(u) {
     wins: u.wins,
     losses: u.losses,
     draws: u.draws,
+    coins: u.coins,
+    equipped: u.equipped,
   };
 }
 

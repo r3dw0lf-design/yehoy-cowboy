@@ -25,6 +25,18 @@ The database tables are created automatically the first time anyone opens the si
 
 Try it locally first with `npx wrangler dev` (uses a local test database).
 
+## Guns, shop and coins
+
+- **Coins** come from playing: 1 coin per 10 points in single player; duels pay 50 (loss), 75 (draw) or 150 (win) plus points/20.
+- **6 guns** (Old Reliable, Peacemaker, Widowmaker, Thunder Twin, Long Tom, Lucky Clover), each with its own design, stats and perk.
+  Buy them in the GUN SHOP. Every player starts with Old Reliable.
+- **Upgrade** each gun to level 5 (more fire rate, ammo, aim area, bonus points) and buy **skins** (Classic, Midnight, Gilded, Neon 85).
+- **Duels:** in the lobby, a dropdown lists only the guns BOTH players own. Everyone uses the chosen gun at level-1 stats
+  (fair fight); each player keeps their own skin.
+- Prices, stats and perks all live in `public/js/guns.js` (shared by the game and the server). Edit it to rebalance.
+- **Updating an existing deployment:** just redeploy. The database upgrades itself (adds `coins`, `equipped` and the gun tables)
+  the first time someone opens the site. Existing accounts and scores are kept.
+
 ## How it works
 
 | Piece | File |
@@ -33,6 +45,9 @@ Try it locally first with `npx wrangler dev` (uses a local test database).
 | Sign up / login / sessions | `src/auth.js` |
 | Duels (requests, lobby, live scores) | `src/duels.js` |
 | Database tables (auto-created) | `src/db.js` |
+| Gun shop / inventory / duel gun rules | `src/armory.js`, `src/duels.js` |
+| Gun catalog (prices, stats, perks) | `public/js/guns.js` |
+| Gun art + skins (drawn in code) | `public/js/guns-art.js` |
 | Game engine | `public/js/game.js` |
 | Birds + desert scene (drawn in code) | `public/js/sprites.js`, `scene.js` |
 | Music + sound effects | `public/js/sfx.js`, `public/audio/*.mp3` |

@@ -1,7 +1,9 @@
 import { ensureSchema } from "./db.js";
 import { HttpError, json, readJson } from "./util.js";
 import { signup, login, logout, authenticate, publicUser } from "./auth.js";
-import { listPlayers, createDuel, respondDuel, cancelDuel, setReady, getDuel, postScore, poll } from "./duels.js";
+import { listPlayers, createDuel, respondDuel, cancelDuel, setReady, getDuel, postScore, poll, setGun } from "./duels.js";
+import { getArmory, buyGun, upgradeGun, setSkin, equipGun } from "./armory.js";
+import { singleCoins } from "../public/js/guns.js";
 
 async function handleApi(request, env, url) {
   const now = Date.now();
@@ -29,8 +31,9 @@ async function handleApi(request, env, url) {
     const body = await readJson(request);
     const score = Math.floor(Number(body.score));
     if (!Number.isFinite(score) || score < 0 || score > 10000000) throw new HttpError(400, "Bad score.");
-    await env.DB.prepare("UPDATE users SET high_score=MAX(high_score,?) WHERE id=?").bind(score, me.id).run();
-    return json({ high_score: Math.max(me.high_score, score), newRecord: score > me.high_score });
+    const earned = singleCoins(score);
+    await env.DB.prepare("UPDATE users SET high_score=MAX(high_score,?), coins=coins+? WHERE id=?").bind(score, earned, me.id).run();
+    return json({ high_score: Math.max(me.high_score, score), newRecord: score > me.high_score, coinsEarned: earned, coins: me.coins + earned });
   }
 
   if (path === "/api/leaderboard" && method === "GET") {
@@ -43,11 +46,17 @@ async function handleApi(request, env, url) {
     return json({ topScores: top.results, topDuelists: duelists.results });
   }
 
+  if (path === "/api/armory" && method === "GET") return getArmory(env, me);
+  if (path === "/api/shop/buy" && method === "POST") return buyGun(env, request, me);
+  if (path === "/api/shop/upgrade" && method === "POST") return upgradeGun(env, request, me);
+  if (path === "/api/armory/skin" && method === "POST") return setSkin(env, request, me);
+  if (path === "/api/armory/equip" && method === "POST") return equipGun(env, request, me);
+
   if (path === "/api/players" && method === "GET") return listPlayers(env, me, now);
   if (path === "/api/poll" && method === "GET") return poll(env, me, now);
   if (path === "/api/duels" && method === "POST") return createDuel(env, request, me, now);
 
-  const m = path.match(/^\/api\/duels\/(\d+)(?:\/(respond|cancel|ready|score))?$/);
+  const m = path.match(/^\/api\/duels\/(\d+)(?:\/(respond|cancel|ready|score|gun))?$/);
   if (m) {
     const id = parseInt(m[1], 10);
     const action = m[2];
@@ -56,6 +65,7 @@ async function handleApi(request, env, url) {
     if (action === "cancel" && method === "POST") return cancelDuel(env, me, id, now);
     if (action === "ready" && method === "POST") return setReady(env, request, me, id, now);
     if (action === "score" && method === "POST") return postScore(env, request, me, id, now);
+    if (action === "gun" && method === "POST") return setGun(env, request, me, id, now);
   }
 
   throw new HttpError(404, "Nothing here.");

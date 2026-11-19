@@ -1,5 +1,7 @@
 import { HttpError, json, readJson, randomInt31 } from "./util.js";
 import { ONLINE_WINDOW_MS } from "./auth.js";
+import { GUNS, GUN_ORDER, duelCoins } from "../public/js/guns.js";
+import { ownedSet } from "./armory.js";
 
 const READY_FRESH_MS = 30000; // a "ready" click stays valid this long (client re-sends it every ~10s)
 const COUNTDOWN_MS = 6000; // time between both players ready and the duel starting
@@ -45,15 +47,17 @@ async function advance(env, d, now) {
         .run();
       if (res.meta.changes === 1) {
         const stmts = [];
-        const upd = (col, uid, score) =>
-          env.DB.prepare(`UPDATE users SET ${col}=${col}+1, best_duel_score=MAX(best_duel_score,?) WHERE id=?`).bind(score, uid);
+        const upd = (col, uid, score, result) =>
+          env.DB.prepare(
+            `UPDATE users SET ${col}=${col}+1, best_duel_score=MAX(best_duel_score,?), coins=coins+? WHERE id=?`
+          ).bind(score, duelCoins(result, score), uid);
         if (winner === null) {
-          stmts.push(upd("draws", d.challenger_id, d.c_score), upd("draws", d.opponent_id, d.o_score));
+          stmts.push(upd("draws", d.challenger_id, d.c_score, "draw"), upd("draws", d.opponent_id, d.o_score, "draw"));
         } else {
           const loser = winner === d.challenger_id ? d.opponent_id : d.challenger_id;
           stmts.push(
-            upd("wins", winner, winner === d.challenger_id ? d.c_score : d.o_score),
-            upd("losses", loser, loser === d.challenger_id ? d.c_score : d.o_score)
+            upd("wins", winner, winner === d.challenger_id ? d.c_score : d.o_score, "win"),
+            upd("losses", loser, loser === d.challenger_id ? d.c_score : d.o_score, "loss")
           );
         }
         await env.DB.batch(stmts);
@@ -64,7 +68,13 @@ async function advance(env, d, now) {
   return d;
 }
 
-function view(d, me, now) {
+// guns BOTH players own (everyone owns the rifle)
+async function commonGuns(env, d) {
+  const [a, b] = await Promise.all([ownedSet(env, d.challenger_id), ownedSet(env, d.opponent_id)]);
+  return GUN_ORDER.filter((id) => a.has(id) && b.has(id));
+}
+
+function view(d, me, now, common = null) {
   const mine = d.challenger_id === me.id;
   const side = (p) => ({
     username: p === "c" ? d.c_name : d.o_name,
@@ -83,6 +93,8 @@ function view(d, me, now) {
     id: d.id,
     status: d.status,
     duration: d.duration,
+    gun: d.gun || "rifle",
+    commonGuns: common,
     seed: d.seed,
     start_at: d.start_at,
     serverTime: now,
@@ -186,14 +198,34 @@ export async function setReady(env, request, me, id, now) {
       .run();
     d = await advance(env, await loadDuel(env, id), now);
   }
-  return json({ duel: view(d, me, now) });
+  return json({ duel: view(d, me, now, d.status === "accepted" ? await commonGuns(env, d) : null) });
 }
 
 export async function getDuel(env, me, id, now) {
   let d = await loadDuel(env, id);
   requireParticipant(d, me);
   d = await advance(env, d, now);
-  return json({ duel: view(d, me, now) });
+  return json({ duel: view(d, me, now, d.status === "accepted" ? await commonGuns(env, d) : null) });
+}
+
+// Either player can change the duel gun in the lobby; both must own it.
+// Changing it un-readies both players so nobody is surprised.
+export async function setGun(env, request, me, id, now) {
+  const body = await readJson(request);
+  let d = await loadDuel(env, id);
+  requireParticipant(d, me);
+  if (d.status !== "accepted") throw new HttpError(409, "The gun can only be changed in the lobby.");
+  const gun = typeof body.gun === "string" ? body.gun : "";
+  if (!GUNS[gun]) throw new HttpError(400, "Unknown gun.");
+  const common = await commonGuns(env, d);
+  if (!common.includes(gun)) throw new HttpError(409, "You both need to own that gun.");
+  if (d.gun !== gun) {
+    await env.DB.prepare("UPDATE duels SET gun=?, c_ready_at=0, o_ready_at=0, updated_at=? WHERE id=? AND status='accepted'")
+      .bind(gun, now, id)
+      .run();
+  }
+  d = await loadDuel(env, id);
+  return json({ duel: view(d, me, now, common) });
 }
 
 export async function postScore(env, request, me, id, now) {
@@ -308,6 +340,8 @@ export async function poll(env, me, now) {
       wins: fresh_me.wins,
       losses: fresh_me.losses,
       draws: fresh_me.draws,
+      coins: fresh_me.coins,
+      equipped: fresh_me.equipped,
     },
     incoming,
     outgoing,
@@ -322,6 +356,8 @@ export async function poll(env, me, now) {
         theirScore: v.opponent.score,
         result: v.result,
         duration: d.duration,
+        gun: d.gun,
+        coins: duelCoins(v.result, v.you.score),
         finished_at: d.finished_at,
       };
     }),

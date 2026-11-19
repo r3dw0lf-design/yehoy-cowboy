@@ -2,6 +2,8 @@ import { api } from "./api.js";
 import { audio, sfx, playTrack } from "./sfx.js";
 import { Game } from "./game.js";
 import { drawScene } from "./scene.js";
+import { GUNS, GUN_ORDER, SKINS, SKIN_ORDER, MAX_LEVEL, gunStats, statBars, upgradeCost, duelCoins } from "./guns.js";
+import { previewGun } from "./guns-art.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const app = $("#app");
@@ -12,7 +14,29 @@ const RANKS = [[0, "GREENHORN"], [500, "DEPUTY"], [1500, "RANGER"], [3500, "SHER
 const rankFor = (score) => RANKS.filter(([min]) => score >= min).pop()[1];
 const fmtDur = (s) => (s >= 60 && s % 60 === 0 ? `${s / 60} min` : `${s}s`);
 
+// ---------------- guns: what the player owns / has equipped ----------------
+async function loadArmory() {
+  try {
+    S.armory = await api.armory();
+    if (S.user) S.user.coins = S.armory.coins;
+  } catch {}
+  return S.armory;
+}
+function ownedGun(id) {
+  return S.armory && S.armory.guns.find((g) => g.id === id);
+}
+const skinFor = (id) => (ownedGun(id) ? ownedGun(id).skin : "classic");
+function loadout() {
+  const id = S.armory && ownedGun(S.armory.equipped) ? S.armory.equipped : "rifle";
+  const g = ownedGun(id) || { level: 1, skin: "classic" };
+  return { id, skin: g.skin, level: g.level, stats: gunStats(id, g.level) };
+}
+const paintPreviews = (root = document) => root.querySelectorAll("canvas.gpv").forEach((c) => previewGun(c, c.dataset.gun, c.dataset.skin));
+const barsHtml = (stats) =>
+  statBars(stats).map(([n, v]) => `<div class="stat"><span>${n}</span><span class="pips">${Array.from({ length: 10 }, (_, i) => `<i class="${i < Math.round(v) ? "on" : ""}"></i>`).join("")}</span></div>`).join("");
+
 const S = {
+  armory: null,
   user: null,
   poll: null,
   screen: "auth",
@@ -86,8 +110,8 @@ function go(screen, params) {
   S.screen = screen;
   document.body.classList.toggle("in-game", screen === "single" || screen === "duel");
   window.scrollTo(0, 0);
-  const fn = { auth: renderAuth, menu: renderMenu, single: renderSingle, hub: renderHub, lobby: renderLobby, duel: renderDuel, board: renderBoard }[screen];
-  if (["menu", "hub", "board", "auth"].includes(screen)) playTrack("menu");
+  const fn = { auth: renderAuth, menu: renderMenu, single: renderSingle, hub: renderHub, lobby: renderLobby, duel: renderDuel, board: renderBoard, armory: renderArmory }[screen];
+  if (["menu", "hub", "board", "auth", "armory"].includes(screen)) playTrack("menu");
   fn(params);
 }
 
@@ -100,6 +124,7 @@ async function pollOnce() {
     S.offset = r.serverTime - Date.now();
     S.poll = r;
     S.user = { ...S.user, ...r.me };
+    if (S.armory) { S.armory.coins = r.me.coins; S.armory.equipped = r.me.equipped; }
     for (const n of r.notices) {
       if (n.type === "request")
         toast(`<b>${esc(n.from)}</b> challenges you to a <b>${fmtDur(n.duration)}</b> duel! Tap to answer.`, { onClick: () => go("hub") });
@@ -168,6 +193,7 @@ function renderAuth(mode = "login") {
     try {
       const r = signup ? await api.signup(u, p) : await api.login(u, p);
       S.user = r.user;
+      await loadArmory();
       startPolling();
       go("menu");
     } catch (ex) {
@@ -187,10 +213,12 @@ function renderMenu() {
     <div class="subtitle">&#9733; SHOWDOWN &#9733;</div>
     <div class="plate">HOWDY, <b>${esc(u.username)}</b>!<br>
       RANK <b>${rankFor(u.high_score)}</b><br>
+      COINS <b>${fmtNum(u.coins)}</b> &nbsp;|&nbsp; GUN <b>${esc(GUNS[loadout().id].name.toUpperCase())}</b><br>
       HIGH SCORE <b>${fmtNum(u.high_score)}</b> &nbsp;|&nbsp; DUELS <b>${u.wins}W ${u.losses}L ${u.draws}D</b></div>
     <nav class="menu">
       <button class="btn gold" id="sp">SINGLE PLAYER</button>
       <button class="btn red" id="mp">MULTIPLAYER<span class="badge" id="mpBadge" hidden></span></button>
+      <button class="btn green" id="gs">GUN SMITH</button>
       <button class="btn teal" id="lb">LEADERBOARD</button>
       <button class="btn" id="out">SIGN OUT</button>
     </nav>
@@ -198,6 +226,7 @@ function renderMenu() {
   $("#sp").onclick = () => { sfx.click(); go("single"); };
   $("#mp").onclick = () => { sfx.click(); go("hub"); };
   $("#lb").onclick = () => { sfx.click(); go("board"); };
+  $("#gs").onclick = () => { sfx.click(); go("armory"); };
   $("#out").onclick = async () => {
     try { await api.logout(); } catch {}
     clearInterval(S.pollTimer);
@@ -268,13 +297,18 @@ function renderSingle() {
 }
 
 function showStartOverlay() {
+  const lo = loadout();
   const ov = $("#ov");
   ov.className = "overlay";
   ov.innerHTML = `<h3>BIRD HUNT</h3>
     <p>Shoot the birds out of the sky! Your bullets are limited, but every few kills a supply drop gives you more.
     Hit streaks multiply your points, and every level brings faster, bigger birds.</p>
     ${LEGEND}
+    <div class="loadout"><canvas class="gpv" width="100" height="44" data-gun="${lo.id}" data-skin="${lo.skin}"></canvas>
+      <div><b>${esc(GUNS[lo.id].name)}</b> <small>LV ${lo.level}</small><br><button class="btn small" id="chg">CHANGE GUN</button></div></div>
     <button class="btn gold" id="start">CLICK TO START</button>`;
+  paintPreviews(ov);
+  $("#chg").onclick = (e) => { e.stopPropagation(); sfx.click(); go("armory"); };
   ov.onclick = (e) => { e.stopPropagation(); startSingle(); };
 }
 
@@ -286,6 +320,7 @@ function startSingle() {
   let lastAmmo = -1;
   S.game = new Game($("#cv"), {
     mode: "single",
+    gun: loadout(),
     onHud: (h) => {
       $("#hScore").textContent = fmtNum(h.score);
       $("#hHi").textContent = fmtNum(Math.max(S.user.high_score, h.score));
@@ -303,11 +338,14 @@ function startSingle() {
     },
     onEnd: async ({ score, kills, level, shots, hits, bestStreak }) => {
       sfx.gameOver();
-      let record = false, high = S.user.high_score;
+      let record = false, high = S.user.high_score, coinsEarned = 0;
       try {
         const r = await api.score(score);
         record = r.newRecord; high = r.high_score;
+        coinsEarned = r.coinsEarned;
         S.user.high_score = high;
+        S.user.coins = r.coins;
+        if (S.armory) S.armory.coins = r.coins;
       } catch {
         record = score > S.user.high_score;
         if (record) { high = score; S.user.high_score = score; }
@@ -315,7 +353,7 @@ function startSingle() {
       ov.hidden = false; ov.className = "overlay noclick";
       ov.innerHTML = `<h3>OUT OF AMMO!</h3>
         <div class="score-big">${fmtNum(score)}</div>
-        <p>${record ? "&#9733; NEW HIGH SCORE! &#9733;" : `HIGH SCORE: ${fmtNum(high)}`}<br>RANK: <b style="color:var(--gold);font-weight:400">${rankFor(score)}</b><br>${kills} birds downed &middot; level ${level} &middot; accuracy ${shots ? Math.round((hits / shots) * 100) : 0}% &middot; best streak ${bestStreak}</p>
+        <p>${record ? "&#9733; NEW HIGH SCORE! &#9733;" : `HIGH SCORE: ${fmtNum(high)}`}<br>RANK: <b style="color:var(--gold);font-weight:400">${rankFor(score)}</b><br>${kills} birds downed &middot; level ${level} &middot; accuracy ${shots ? Math.round((hits / shots) * 100) : 0}% &middot; best streak ${bestStreak}<br><b style="color:var(--gold);font-weight:400">+${fmtNum(coinsEarned)} COINS</b></p>
         <div class="btns"><button class="btn gold" id="again">PLAY AGAIN</button><button class="btn" id="menuB">BACK TO TOWN</button></div>`;
       $("#again").onclick = () => { sfx.click(); go("single"); };
       $("#menuB").onclick = () => go("menu");
@@ -424,7 +462,7 @@ function renderHub() {
         <span class="acts"><button class="btn small red" data-a="cancel" data-id="${d.id}">CANCEL</button></span></div>`).join("") || none("Nothing pending.");
     $("#hist").innerHTML = p.recent.map((d) => `
       <div class="row"><span>vs <span class="who">${esc(d.opponent)}</span> &middot; ${fmtDur(d.duration)}</span>
-        <span class="res-${d.result}">${d.result === "win" ? "WON" : d.result === "loss" ? "LOST" : "DRAW"} ${fmtNum(d.yourScore)} - ${fmtNum(d.theirScore)}</span></div>`).join("") || none("No duels yet.");
+        <span class="res-${d.result}">${d.result === "win" ? "WON" : d.result === "loss" ? "LOST" : "DRAW"} ${fmtNum(d.yourScore)} - ${fmtNum(d.theirScore)} <small>(+${fmtNum(d.coins)}c)</small></span></div>`).join("") || none("No duels yet.");
   };
   S.hubRefresh = draw;
   draw();
@@ -466,6 +504,12 @@ function renderLobby({ id }) {
       <div class="vs">
         <div class="gunner" id="gMe"></div><div class="vs-badge">VS</div><div class="gunner" id="gOpp"></div>
       </div>
+      <div class="gunpick">
+        <span class="lbl">DUEL GUN <small>(only guns you BOTH own)</small></span>
+        <div class="gp-row"><select id="gunSel" aria-label="Duel gun"></select>
+          <canvas class="gpv" id="gpv" width="100" height="44"></canvas></div>
+        <div class="hint" id="gunNote">Same gun for both gunslingers at level-1 stats, so it's a fair fight. Your skin stays yours.</div>
+      </div>
       <p class="hint" style="text-align:center" id="tip">Both gunslingers hit READY and the duel starts after a short countdown.</p>
       <div class="acts">
         <button class="btn green" id="rdy">READY!</button>
@@ -474,9 +518,26 @@ function renderLobby({ id }) {
       </div>
     </section>
   </main>`;
-  let started = false;
+  let started = false, lastGun = null, lastSig = "";
+  const sel = $("#gunSel");
 
   const paint = (d) => {
+    // gun picker: options are the guns both players own
+    const common = d.commonGuns || ["rifle"];
+    const sig = common.join(",");
+    if (sig !== lastSig) {
+      lastSig = sig;
+      sel.innerHTML = common.map((g) => `<option value="${g}">${esc(GUNS[g].name)} (${esc(GUNS[g].type)})</option>`).join("");
+    }
+    if (lastGun !== null && d.gun !== lastGun) toast(`The duel gun is now <b>${esc(GUNS[d.gun].name)}</b>. Everyone has to hit READY again.`);
+    lastGun = d.gun;
+    if (document.activeElement !== sel) sel.value = d.gun;
+    const pv = $("#gpv");
+    if (pv.dataset.gun !== d.gun) {
+      pv.dataset.gun = d.gun; pv.dataset.skin = skinFor(d.gun);
+      previewGun(pv, d.gun, pv.dataset.skin);
+    }
+    $("#gunNote").textContent = `${GUNS[d.gun].perk}`;
     $("#info").innerHTML = `${fmtDur(d.duration)} DUEL &middot; MOST POINTS WINS`;
     const card = (p, you) => `<div class="nm">${esc(p.username)}${you ? " (YOU)" : ""}</div>
       <div><i class="dot ${p.online ? "on" : ""}"></i></div>
@@ -520,6 +581,11 @@ function renderLobby({ id }) {
     sfx.click();
     try { const r = await api.ready(id, !S.lobbyReady); handle(r.duel); } catch (e) { toast(esc(e.message), { kind: "err" }); }
   };
+  sel.onchange = async () => {
+    sfx.click();
+    lastGun = sel.value;
+    try { handle((await api.duelGun(id, sel.value)).duel); } catch (e) { toast(esc(e.message), { kind: "err" }); }
+  };
   $("#leave").onclick = () => go("hub");
   $("#callOff").onclick = async () => {
     try { await api.cancel(id); } catch {}
@@ -551,7 +617,7 @@ function renderDuel({ duel }) {
       <div id="banner"></div>
       <div class="overlay noclick" id="ov" hidden></div>
     </div>
-    <div class="gbar"><span></span><p class="hint">Same birds for both of you &middot; out of ammo = 2s reload &middot; most points wins</p></div>
+    <div class="gbar"><span></span><p class="hint">Duel gun: ${esc(GUNS[duel.gun].name)} (equal stats for both) &middot; out of ammo = 2s reload &middot; most points wins</p></div>
   </div>`;
 
   const ov = $("#ov");
@@ -559,6 +625,7 @@ function renderDuel({ duel }) {
 
   S.game = new Game($("#cv"), {
     mode: "duel",
+    gun: { id: duel.gun, skin: skinFor(duel.gun), stats: gunStats(duel.gun, 1) },
     seed: duel.seed,
     duration: duel.duration,
     getClock,
@@ -627,7 +694,7 @@ function renderDuel({ duel }) {
     ov.hidden = false;
     ov.innerHTML = `<h3>${heading}</h3>
       <div class="score-big">${fmtNum(mine)} - ${fmtNum(theirs)}</div>
-      <p>${esc(duel.you.username)} vs ${esc(duel.opponent.username)}<br>${res === "win" ? "Fastest gun in Dusty Gulch!" : res === "loss" ? "Better luck next sundown, partner." : res === "draw" ? "Dead even. Call for a rematch!" : "Couldn't confirm the final result."}</p>
+      <p>${esc(duel.you.username)} vs ${esc(duel.opponent.username)}<br>${res === "win" ? "Fastest gun in Dusty Gulch!" : res === "loss" ? "Better luck next sundown, partner." : res === "draw" ? "Dead even. Call for a rematch!" : "Couldn't confirm the final result."}<br><b style="color:var(--gold);font-weight:400">+${fmtNum(res ? duelCoins(res, mine) : 0)} COINS</b></p>
       <div class="btns"><button class="btn gold" id="rematch">REMATCH</button><button class="btn" id="toHub">BACK TO SALOON</button></div>`;
     $("#toHub").onclick = () => { go("hub"); startPolling(); };
     $("#rematch").onclick = async () => {
@@ -641,12 +708,106 @@ function renderDuel({ duel }) {
   }
 }
 
+
+// ---------------- GUN SMITH: armory + shop ----------------
+async function renderArmory({ tab = "armory" } = {}) {
+  app.innerHTML = `
+  <main class="center">
+    <h1 class="title small">GUN SMITH</h1>
+    <div class="plate" id="coinBar"></div>
+    <div class="tabs2">
+      <button class="btn small ${tab === "armory" ? "gold" : ""}" id="tA">MY ARMORY</button>
+      <button class="btn small ${tab === "shop" ? "gold" : ""}" id="tS">GUN SHOP</button>
+    </div>
+    <div class="guncards" id="cards"><div class="panel">Loading...</div></div>
+    <p><button class="btn" id="back">&laquo; BACK TO TOWN</button></p>
+  </main>`;
+  $("#back").onclick = () => go("menu");
+  $("#tA").onclick = () => { sfx.click(); go("armory", { tab: "armory" }); };
+  $("#tS").onclick = () => { sfx.click(); go("armory", { tab: "shop" }); };
+  await loadArmory();
+  if (!S.armory) { $("#cards").innerHTML = `<div class="panel">Couldn't load your guns. Try again.</div>`; return; }
+
+  const draw = () => {
+    const A = S.armory;
+    $("#coinBar").innerHTML = `YOUR COINS <b>${fmtNum(A.coins)}</b><br><small>Earn coins: 1 per 10 points in single player &middot; duels pay 50-150 + points/20</small>`;
+    let html = "";
+    if (tab === "armory") {
+      html = A.guns.map((g) => {
+        const def = GUNS[g.id], eq = A.equipped === g.id, next = upgradeCost(g.id, g.level);
+        return `<article class="gun-card ${eq ? "eq" : ""}">
+          ${eq ? `<div class="ribbon">EQUIPPED</div>` : ""}
+          <canvas class="gpv" width="100" height="44" data-gun="${g.id}" data-skin="${g.skin}"></canvas>
+          <h3>${esc(def.name)} <small>${esc(def.type)}</small></h3>
+          <div class="lvl">LEVEL ${g.level} / ${MAX_LEVEL} <span class="pips">${Array.from({ length: MAX_LEVEL }, (_, i) => `<i class="${i < g.level ? "on" : ""}"></i>`).join("")}</span></div>
+          <p class="perk">${esc(def.perk)}</p>
+          ${barsHtml(gunStats(g.id, g.level))}
+          <span class="lbl">SKINS</span>
+          <div class="chips">${SKIN_ORDER.map((s) => {
+            const own = g.skins.includes(s);
+            return `<button class="chip ${g.skin === s ? "on" : ""}" data-act="skin" data-gun="${g.id}" data-skin="${s}">${esc(SKINS[s].name)}${own ? "" : ` &middot; ${SKINS[s].price}c`}</button>`;
+          }).join("")}</div>
+          <div class="gc-acts">
+            <button class="btn small ${eq ? "" : "green"}" data-act="equip" data-gun="${g.id}" ${eq ? "disabled" : ""}>${eq ? "EQUIPPED" : "EQUIP"}</button>
+            <button class="btn small gold" data-act="upgrade" data-gun="${g.id}" ${next === null ? "disabled" : ""}>${next === null ? "MAX LEVEL" : `UPGRADE &middot; ${fmtNum(next)}c`}</button>
+          </div></article>`;
+      }).join("");
+    } else {
+      const forSale = GUN_ORDER.filter((id) => !ownedGun(id));
+      html = forSale.map((id) => {
+        const def = GUNS[id];
+        return `<article class="gun-card">
+          <canvas class="gpv" width="100" height="44" data-gun="${id}" data-skin="classic"></canvas>
+          <h3>${esc(def.name)} <small>${esc(def.type)}</small></h3>
+          <p class="perk">${esc(def.perk)}</p>
+          ${barsHtml(gunStats(id, 1))}
+          <div class="gc-acts"><button class="btn small ${A.coins >= def.price ? "gold" : ""}" data-act="buy" data-gun="${id}">BUY &middot; ${fmtNum(def.price)}c</button></div>
+        </article>`;
+      }).join("") || `<div class="panel">You own every gun in town. Now go upgrade them!</div>`;
+    }
+    $("#cards").innerHTML = html;
+    paintPreviews($("#cards"));
+  };
+  draw();
+
+  $("#cards").onclick = async (e) => {
+    const b = e.target.closest("button[data-act]");
+    if (!b || b.disabled) return;
+    const act = b.dataset.act, gun = b.dataset.gun;
+    try {
+      if (act === "buy") {
+        if (S.armory.coins < GUNS[gun].price) return toast(`You need <b>${fmtNum(GUNS[gun].price - S.armory.coins)}</b> more coins for the ${esc(GUNS[gun].name)}.`, { kind: "err" });
+        S.armory = await api.buy(gun); sfx.ammo();
+        toast(`You bought the <b>${esc(GUNS[gun].name)}</b>! Find it in your armory.`, { ms: 3000 });
+      } else if (act === "upgrade") {
+        S.armory = await api.upgrade(gun); sfx.level();
+      } else if (act === "equip") {
+        S.armory = await api.equip(gun); sfx.click();
+      } else if (act === "skin") {
+        const g = ownedGun(gun), skin = b.dataset.skin;
+        if (!g.skins.includes(skin)) {
+          if (S.armory.coins < SKINS[skin].price) return toast(`You need <b>${fmtNum(SKINS[skin].price - S.armory.coins)}</b> more coins for that skin.`, { kind: "err" });
+          if (!confirm(`Buy the ${SKINS[skin].name} skin for ${SKINS[skin].price} coins?`)) return;
+          sfx.ammo();
+        } else sfx.click();
+        S.armory = await api.skin(gun, skin);
+      }
+      S.user.coins = S.armory.coins;
+      draw();
+    } catch (ex) {
+      toast(esc(ex.message), { kind: "err" });
+      await loadArmory(); draw();
+    }
+  };
+}
+
 // ---------------- boot ----------------
 (async function boot() {
   try {
     const r = await api.me();
     S.user = r.user;
     S.offset = r.serverTime - Date.now();
+    await loadArmory();
     startPolling();
     go("menu");
   } catch {

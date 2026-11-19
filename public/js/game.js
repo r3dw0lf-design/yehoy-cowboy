@@ -4,6 +4,8 @@
 import { W, H, HORIZON, drawScene } from "./scene.js";
 import { BIRD_TYPES, getSprite, spriteSize, drawText, textWidth } from "./sprites.js";
 import { sfx } from "./sfx.js";
+import { gunStats } from "./guns.js";
+import { drawGun, GUN_ART } from "./guns-art.js";
 
 export function mulberry32(a) {
   a = a >>> 0;
@@ -16,11 +18,7 @@ export function mulberry32(a) {
   };
 }
 
-const START_AMMO = 12;
-const MAX_AMMO = 20;
-const COOLDOWN = 0.28;
 const DUEL_RELOAD_TIME = 2;
-const DUEL_RELOAD_AMMO = 5;
 const KILLS_PER_LEVEL = 5; // single player
 const SECONDS_PER_LEVEL = 12; // duel
 
@@ -110,7 +108,9 @@ export class Game {
     this.score = 0;
     this.kills = 0;
     this.streak = 0;
-    this.ammo = START_AMMO;
+    this.gun = opts.gun || { id: "rifle", skin: "classic", stats: gunStats("rifle", 1) };
+    this.gs = this.gun.stats; // damage, fire rate, ammo, spread... come from the equipped gun
+    this.ammo = this.gs.startAmmo;
     this.level = 1;
     this.t = 0;
     this.birds = [];
@@ -249,7 +249,7 @@ export class Game {
       // duel reload finished
       if (this.mode === "duel" && this.reloadUntil && t >= this.reloadUntil) {
         this.reloadUntil = 0;
-        this.ammo = DUEL_RELOAD_AMMO;
+        this.ammo = this.gs.reloadAmmo;
         sfx.lever();
       }
 
@@ -293,44 +293,48 @@ export class Game {
       return;
     }
     const t = this.t;
+    const gs = this.gs;
     this.ammo--;
-    this.cooldown = COOLDOWN;
+    this.cooldown = gs.cooldown;
     this.recoil = 1;
     this.flash = 0.08;
     sfx.shoot();
     setTimeout(() => sfx.lever(), 80);
     this.shots++;
-    this.shake = 1;
+    this.shake = gs.multi ? 1.8 : gs.dmg > 1 ? 1.5 : 1;
     this.muzzleEffects();
 
-    // find the bird under the crosshair (topmost = last drawn)
-    let target = null;
+    // which birds did the shot hit? (shotguns hit everything in range, others the topmost bird)
+    const pad = gs.pad;
+    const targets = [];
     for (let i = this.birds.length - 1; i >= 0; i--) {
       const b = this.birds[i];
       const p = birdPos(b, t);
-      if (px >= p.x - 3 && px <= p.x + b.w + 3 && py >= p.y - 3 && py <= p.y + b.h + 3) {
-        target = { b, p };
-        break;
+      if (px >= p.x - pad && px <= p.x + b.w + pad && py >= p.y - pad && py <= p.y + b.h + pad) {
+        targets.push({ b, p });
+        if (!gs.multi) break;
       }
     }
+    if (gs.multi) this.burst(px, py, "#ffe9a0", 12, true);
 
     let refilled = false;
-    if (target) {
-      const { b, p } = target;
-      const spec = BIRD_TYPES[b.type];
-      b.hp--;
+    if (targets.length) {
       this.hits++;
       this.streak++;
       this.bestStreak = Math.max(this.bestStreak, this.streak);
-      if (b.hp > 0) {
-        b.flashUntil = performance.now() + 120;
-        sfx.hit();
-        this.burst(px, py, spec.body, 4);
-      } else {
+      const combo = comboMult(this.streak);
+      for (const { b, p } of targets) {
+        const spec = BIRD_TYPES[b.type];
+        b.hp -= gs.dmg;
+        if (b.hp > 0) {
+          b.flashUntil = performance.now() + 120;
+          sfx.hit();
+          this.burst(px, py, spec.body, 4);
+          continue;
+        }
         this.kills++;
-        const combo = comboMult(this.streak);
         const lvl = this.mode === "single" ? this.currentLevel : this.level;
-        const pts = Math.round(spec.points * pointsMult(lvl) * combo);
+        const pts = Math.round(spec.points * pointsMult(lvl) * combo * gs.scoreMult);
         this.score += pts;
         this.birds = this.birds.filter((x) => x !== b);
         this.falling.push({ type: b.type, x: p.x, y: p.y, vx: b.dir * 14, vy: -30, dir: b.dir, spin: 0, w: b.w, h: b.h });
@@ -339,25 +343,31 @@ export class Game {
         this.popups.push({ text: `+${pts}`, x: p.x + b.w / 2 - textWidth(`+${pts}`) / 2, y: p.y - 4, life: 1.0, color: combo > 1 ? "#ffd75a" : "#ffffff" });
         if (combo > 1) this.popups.push({ text: `x${combo}`, x: p.x + b.w / 2 - 4, y: p.y - 12, life: 0.9, color: "#ff8ab0" });
         sfx.kill(combo);
-        const callout = { 3: ["NICE SHOT!", "3 IN A ROW"], 6: ["SHARPSHOOTER!", "6 IN A ROW"], 10: ["DEAD EYE!", "10 IN A ROW"], 15: ["LEGENDARY!", "15 IN A ROW"], 20: ["GUNSLINGER!", "20 IN A ROW"] }[this.streak];
-        if (callout && this.o.onBanner) this.o.onBanner(callout[0], callout[1], "combo");
 
-        // supply drops: every few kills, random bullets
+        // supply drops: every few kills, random bullets (bigger with a lucky gun)
         this.refillNeed--;
         let gift = 0;
         if (this.refillNeed <= 0) {
-          gift += this.refillAmt;
+          gift += Math.round(this.refillAmt * gs.luck);
           this.refillNeed = this.rollNeed();
           this.refillAmt = this.rollAmt();
         }
         if (spec.rare) gift += 3; // golden eagle always drops ammo
         if (gift > 0) {
-          this.ammo = Math.min(MAX_AMMO, this.ammo + gift);
+          this.ammo = Math.min(gs.maxAmmo, this.ammo + gift);
           refilled = true;
           sfx.ammo();
           this.o.onBanner && this.o.onBanner(`+${gift} AMMO`, "SUPPLY DROP!", "ammo");
         }
+        // lucky guns sometimes hand you a free bullet
+        if (gs.killAmmoChance && Math.random() < gs.killAmmoChance && this.ammo < gs.maxAmmo) {
+          this.ammo++;
+          refilled = true;
+          this.popups.push({ text: "+1", x: p.x + b.w / 2 + 8, y: p.y + 4, life: 0.8, color: "#9ff2a6" });
+        }
       }
+      const callout = { 3: ["NICE SHOT!", "3 IN A ROW"], 6: ["SHARPSHOOTER!", "6 IN A ROW"], 10: ["DEAD EYE!", "10 IN A ROW"], 15: ["LEGENDARY!", "15 IN A ROW"], 20: ["GUNSLINGER!", "20 IN A ROW"] }[this.streak];
+      if (callout && this.o.onBanner) this.o.onBanner(callout[0], callout[1], "combo");
     } else {
       this.streak = 0;
       this.burst(px, py, "#f0c080", 3, true);
@@ -381,7 +391,8 @@ export class Game {
 
   muzzleEffects() {
     const a = this.rifleAngle();
-    const tx = W / 2 + Math.cos(a) * 52, ty = H + 4 + Math.sin(a) * 52;
+    const mz = GUN_ART[this.gun.id].muzzle;
+    const tx = W / 2 + Math.cos(a) * mz, ty = H + 4 + Math.sin(a) * mz;
     for (let i = 0; i < 7; i++) {
       this.particles.push({
         x: tx + (Math.random() - 0.5) * 3, y: ty + (Math.random() - 0.5) * 3,
@@ -487,21 +498,7 @@ export class Game {
     ctx.translate(px, py);
     ctx.rotate(a);
     ctx.translate(-this.recoil * 4, 0);
-    const R = (c, x, y, w, h) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
-    R("#150a05", -16, -5, 24, 10); // outline
-    R("#6b3a1c", -15, -4, 22, 8); // stock
-    R("#8a4f2a", -15, -4, 22, 2);
-    R("#150a05", 6, -4, 40, 8);
-    R("#5a5f6b", 7, -2, 38, 4); // barrel
-    R("#9aa0ad", 7, -2, 38, 1);
-    R("#8a4f2a", 7, 1, 14, 2); // fore-end
-    R("#d9a441", 20, -3, 2, 1); // brass band
-    R("#d9a441", 9, 2, 3, 3); // lever loop
-    if (this.flash > 0) {
-      R("#fff7c2", 46, -3, 6, 6);
-      R("#ffb347", 52, -2, 4, 4);
-      R("#ff6a2a", 56, -1, 3, 2);
-    }
+    drawGun(ctx, this.gun.id, this.gun.skin, { flash: this.flash > 0 });
     ctx.restore();
   }
 
