@@ -1,0 +1,22 @@
+{
+  "name": "dusty-gulch-showdown",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-03-01",
+
+  // Static site (everything in /public). Anything that isn't a real file
+  // (like /api/...) falls through to the Worker in src/worker.js.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+
+  // Global database for accounts, scores and duels.
+  // Run `npx wrangler d1 create dusty-gulch-db` and paste the database_id here.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dusty-gulch-db",
+      "database_id": "PASTE-YOUR-DATABASE-ID-HERE"
+    }
+  ]
+}

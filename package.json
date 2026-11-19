@@ -1,0 +1,15 @@
+{
+  "name": "dusty-gulch-showdown",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Retro 80s cowboy bird-shooting game with global accounts and live duels, on Cloudflare Workers + D1",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create dusty-gulch-db"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
