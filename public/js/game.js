@@ -16,11 +16,11 @@ export function mulberry32(a) {
   };
 }
 
-const START_AMMO = 8;
-const MAX_AMMO = 15;
-const COOLDOWN = 0.32;
-const DUEL_RELOAD_TIME = 2.5;
-const DUEL_RELOAD_AMMO = 3;
+const START_AMMO = 12;
+const MAX_AMMO = 20;
+const COOLDOWN = 0.28;
+const DUEL_RELOAD_TIME = 2;
+const DUEL_RELOAD_AMMO = 5;
 const KILLS_PER_LEVEL = 5; // single player
 const SECONDS_PER_LEVEL = 12; // duel
 
@@ -127,6 +127,10 @@ export class Game {
     this.pointer = { x: W / 2, y: 50 };
     this.hudSig = "";
     this.animT = 0;
+    this.shots = 0;
+    this.hits = 0;
+    this.bestStreak = 0;
+    this.shake = 0;
 
     if (this.mode === "duel") {
       this.schedule = buildSchedule(opts.seed, opts.duration);
@@ -172,8 +176,8 @@ export class Game {
     this.dead = true;
   }
 
-  rollNeed() { return 3 + Math.floor(this.rng() * 4); } // 3..6 kills until a supply drop
-  rollAmt() { return 2 + Math.floor(this.rng() * 3); } // 2..4 bullets
+  rollNeed() { return 2 + Math.floor(this.rng() * 3); } // 2..4 kills until a supply drop
+  rollAmt() { return 3 + Math.floor(this.rng() * 3); } // 3..5 bullets
 
   setPaused(p) {
     if (this.over || this.mode !== "single") return;
@@ -216,6 +220,7 @@ export class Game {
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.recoil = Math.max(0, this.recoil - dt * 6);
     this.flash = Math.max(0, this.flash - dt);
+    this.shake = Math.max(0, this.shake - dt * 8);
 
     if (!this.over && t >= 0) {
       // level changes
@@ -262,7 +267,7 @@ export class Game {
     }
     this.falling = this.falling.filter((f) => f.y < HORIZON + 50);
     for (const p of this.particles) {
-      p.vy += 140 * dt;
+      p.vy += (p.g === undefined ? 140 : p.g) * dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.life -= dt;
@@ -278,7 +283,7 @@ export class Game {
   finish() {
     if (this.over) return;
     this.over = true;
-    this.o.onEnd && this.o.onEnd({ score: this.score, kills: this.kills, level: this.level });
+    this.o.onEnd && this.o.onEnd({ score: this.score, kills: this.kills, level: this.level, shots: this.shots, hits: this.hits, bestStreak: this.bestStreak });
   }
 
   shoot(px, py) {
@@ -294,13 +299,16 @@ export class Game {
     this.flash = 0.08;
     sfx.shoot();
     setTimeout(() => sfx.lever(), 80);
+    this.shots++;
+    this.shake = 1;
+    this.muzzleEffects();
 
     // find the bird under the crosshair (topmost = last drawn)
     let target = null;
     for (let i = this.birds.length - 1; i >= 0; i--) {
       const b = this.birds[i];
       const p = birdPos(b, t);
-      if (px >= p.x - 2 && px <= p.x + b.w + 2 && py >= p.y - 2 && py <= p.y + b.h + 2) {
+      if (px >= p.x - 3 && px <= p.x + b.w + 3 && py >= p.y - 3 && py <= p.y + b.h + 3) {
         target = { b, p };
         break;
       }
@@ -311,7 +319,9 @@ export class Game {
       const { b, p } = target;
       const spec = BIRD_TYPES[b.type];
       b.hp--;
+      this.hits++;
       this.streak++;
+      this.bestStreak = Math.max(this.bestStreak, this.streak);
       if (b.hp > 0) {
         b.flashUntil = performance.now() + 120;
         sfx.hit();
@@ -329,6 +339,8 @@ export class Game {
         this.popups.push({ text: `+${pts}`, x: p.x + b.w / 2 - textWidth(`+${pts}`) / 2, y: p.y - 4, life: 1.0, color: combo > 1 ? "#ffd75a" : "#ffffff" });
         if (combo > 1) this.popups.push({ text: `x${combo}`, x: p.x + b.w / 2 - 4, y: p.y - 12, life: 0.9, color: "#ff8ab0" });
         sfx.kill(combo);
+        const callout = { 3: ["NICE SHOT!", "3 IN A ROW"], 6: ["SHARPSHOOTER!", "6 IN A ROW"], 10: ["DEAD EYE!", "10 IN A ROW"], 15: ["LEGENDARY!", "15 IN A ROW"], 20: ["GUNSLINGER!", "20 IN A ROW"] }[this.streak];
+        if (callout && this.o.onBanner) this.o.onBanner(callout[0], callout[1], "combo");
 
         // supply drops: every few kills, random bullets
         this.refillNeed--;
@@ -359,6 +371,27 @@ export class Game {
         this.o.onBanner && this.o.onBanner("RELOADING", "OUT OF AMMO", "reload");
       }
     }
+  }
+
+  rifleAngle() {
+    const px = W / 2, py = H + 4;
+    const a = Math.atan2(this.pointer.y - py, this.pointer.x - px);
+    return Math.max(-Math.PI + 0.25, Math.min(-0.25, a));
+  }
+
+  muzzleEffects() {
+    const a = this.rifleAngle();
+    const tx = W / 2 + Math.cos(a) * 52, ty = H + 4 + Math.sin(a) * 52;
+    for (let i = 0; i < 7; i++) {
+      this.particles.push({
+        x: tx + (Math.random() - 0.5) * 3, y: ty + (Math.random() - 0.5) * 3,
+        vx: Math.cos(a) * (10 + Math.random() * 25) + (Math.random() - 0.5) * 14,
+        vy: Math.sin(a) * (10 + Math.random() * 25) - 6, g: -8,
+        life: 0.5 + Math.random() * 0.6, color: i % 2 ? "rgba(215,215,225,0.7)" : "rgba(150,150,165,0.6)", size: 2,
+      });
+    }
+    // ejected brass casing
+    this.particles.push({ x: W / 2 + 4, y: H - 14, vx: 28 + Math.random() * 22, vy: -55 - Math.random() * 20, life: 0.8, color: "#e0a82e", size: 2 });
   }
 
   burst(x, y, color, n, dust = false) {
@@ -394,7 +427,9 @@ export class Game {
   render() {
     const ctx = this.ctx;
     ctx.imageSmoothingEnabled = false;
-    drawScene(ctx, this.animT);
+    ctx.save();
+    if (this.shake > 0.05) ctx.translate(Math.round((Math.random() - 0.5) * 3 * this.shake), Math.round((Math.random() - 0.5) * 3 * this.shake));
+    drawScene(ctx, this.animT, { dusk: Math.min(0.5, (this.level - 1) * 0.05) });
     const t = this.t;
     const nowMs = performance.now();
 
@@ -441,13 +476,13 @@ export class Game {
     for (const p of this.popups) drawText(ctx, p.text, Math.round(p.x), Math.round(p.y), p.color);
 
     this.drawRifle(ctx);
+    ctx.restore();
     this.drawCrosshair(ctx);
   }
 
   drawRifle(ctx) {
     const px = W / 2, py = H + 4;
-    let a = Math.atan2(this.pointer.y - py, this.pointer.x - px);
-    a = Math.max(-Math.PI + 0.25, Math.min(-0.25, a));
+    const a = this.rifleAngle();
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(a);

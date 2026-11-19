@@ -49,6 +49,10 @@ function saguaro(ctx, x, base, h, dark, light) {
   rect(ctx, dark, x + trunkW - 1, armY2, 7, 4);
   rect(ctx, dark, x + trunkW + 2, armY2 - 8, 4, 9);
   rect(ctx, light, x + trunkW + 3, armY2 - 7, 1, 7);
+  // flowers
+  rect(ctx, "#ff6fae", x - 5, armY - 10, 2, 1);
+  rect(ctx, "#ff6fae", x + trunkW + 3, armY2 - 9, 2, 1);
+  rect(ctx, "#ffd75a", x + 1, base - h - 1, 2, 1);
   // rounded top
   rect(ctx, "#12082b", x, base - h, 1, 1);
   rect(ctx, "#12082b", x + trunkW - 1, base - h, 1, 1);
@@ -74,6 +78,18 @@ function saloon(ctx, x, base) {
   // porch roof
   rect(ctx, roof, x - 4, base - 40, w + 8, 4);
   rect(ctx, "#5e3418", x - 4, base - 36, w + 8, 1);
+  // chimney
+  rect(ctx, "#2a150a", x + w - 17, base - 53, 9, 15);
+  rect(ctx, "#6b3a1c", x + w - 16, base - 52, 7, 13);
+  rect(ctx, "#2a150a", x + w - 18, base - 54, 11, 2);
+  // wanted poster + hanging lantern
+  rect(ctx, "#2a150a", x + 31, base - 33, 8, 11);
+  rect(ctx, "#f1e0b4", x + 32, base - 32, 6, 9);
+  rect(ctx, "#8a2a2a", x + 33, base - 31, 4, 1);
+  rect(ctx, "#5e3418", x + 33, base - 29, 4, 3);
+  rect(ctx, "#2a150a", x + 66, base - 35, 1, 4);
+  rect(ctx, "#2a150a", x + 64, base - 31, 5, 6);
+  rect(ctx, "#ffcf5a", x + 65, base - 30, 3, 4);
   // windows
   for (const wx of [x + 8, x + w - 22]) {
     rect(ctx, "#2a150a", wx, base - 30, 14, 14);
@@ -111,6 +127,75 @@ function telegraph(ctx, x, base) {
   rect(ctx, "#3f2012", x, base - 50, 2, 50);
   rect(ctx, "#3f2012", x - 7, base - 48, 16, 2);
   rect(ctx, "#3f2012", x - 5, base - 43, 12, 2);
+}
+
+function wheel(ctx, cx, cy, r) {
+  for (let a = 0; a < 360; a += 10) {
+    const px = cx + Math.cos((a * Math.PI) / 180) * r, py = cy + Math.sin((a * Math.PI) / 180) * r;
+    rect(ctx, "#2a150a", px, py, 1, 1);
+  }
+  rect(ctx, "#8a4f2a", cx - r + 1, cy, r * 2 - 1, 1);
+  rect(ctx, "#8a4f2a", cx, cy - r + 1, 1, r * 2 - 1);
+  rect(ctx, "#d9a441", cx, cy, 1, 1);
+}
+
+function wagon(ctx, x, base) {
+  rect(ctx, "#2a150a", x, base - 13, 30, 9);
+  rect(ctx, "#8a4f2a", x + 1, base - 12, 28, 7);
+  rect(ctx, "#6b3a1c", x + 1, base - 9, 28, 1);
+  rect(ctx, "#2a150a", x + 5, base - 23, 20, 1);
+  rect(ctx, "#2a150a", x + 3, base - 22, 24, 10);
+  rect(ctx, "#f1e0b4", x + 4, base - 22, 22, 9);
+  rect(ctx, "#d8c48c", x + 4, base - 15, 22, 2);
+  rect(ctx, "#b9a46c", x + 14, base - 22, 1, 9);
+  rect(ctx, "#2a150a", x + 30, base - 9, 8, 2); // tongue
+  wheel(ctx, x + 6, base - 4, 5);
+  wheel(ctx, x + 23, base - 4, 5);
+}
+
+function windmillTower(ctx, x, base) {
+  const col = "#3a2a22";
+  for (let i = 0; i < 31; i++) {
+    const half = 2 + Math.round((30 - i) * 0.17);
+    rect(ctx, col, x - half, base - i, 1, 1);
+    rect(ctx, col, x + half, base - i, 1, 1);
+    if (i % 7 === 0) rect(ctx, col, x - half, base - i, half * 2 + 1, 1);
+    if (i % 7 > 0 && i % 7 < 4) rect(ctx, col, x - half + Math.round(((i % 7) / 7) * half * 2), base - i, 1, 1);
+  }
+  rect(ctx, col, x - 2, base - 34, 5, 4);
+  rect(ctx, "#c9b98a", x + 3, base - 34, 6, 2); // tail vane
+}
+
+function distantTown(ctx) {
+  const c = "#3a1550", lit = "#f9c55b";
+  for (const [x, w, h] of [[96, 7, 6], [105, 6, 9], [113, 8, 5], [123, 5, 7], [136, 7, 6]]) rect(ctx, c, x, HORIZON - h, w, h);
+  rect(ctx, c, 126, HORIZON - 14, 2, 7); // steeple
+  rect(ctx, c, 125, HORIZON - 12, 4, 1);
+  for (const [x, y] of [[107, HORIZON - 5], [99, HORIZON - 3], [138, HORIZON - 3]]) rect(ctx, lit, x, y, 1, 1);
+}
+
+function perchedVultures(ctx, x, y) {
+  for (const dx of [-7, 1]) {
+    rect(ctx, "#1a110c", x + dx, y, 5, 3);
+    rect(ctx, "#1a110c", x + dx + 1, y - 2, 2, 2);
+    rect(ctx, "#d9777a", x + dx + 3, y - 2, 1, 1);
+  }
+}
+
+function skullAndBones(ctx, x, y) {
+  rect(ctx, "#efe4c8", x, y, 5, 4);
+  rect(ctx, "#2a150a", x + 1, y + 1, 1, 1);
+  rect(ctx, "#2a150a", x + 3, y + 1, 1, 1);
+  rect(ctx, "#efe4c8", x + 1, y + 4, 3, 1);
+  rect(ctx, "#efe4c8", x + 8, y + 3, 6, 1);
+  rect(ctx, "#efe4c8", x + 8, y + 2, 1, 1);
+  rect(ctx, "#efe4c8", x + 13, y + 4, 1, 1);
+}
+
+function hitchingPost(ctx, x, base) {
+  rect(ctx, "#5e3418", x, base - 10, 2, 10);
+  rect(ctx, "#5e3418", x + 16, base - 10, 2, 10);
+  rect(ctx, "#8a4f2a", x - 1, base - 10, 20, 2);
 }
 
 let bgCache = null;
@@ -158,6 +243,8 @@ export function getBackground() {
   mesa(ctx, "#4a1c5c", 132, HORIZON + 2, 60, 24, 8);
   mesa(ctx, "#4a1c5c", -10, HORIZON + 2, 42, 18, 6);
 
+  distantTown(ctx);
+
   // ground, banded like old arcade art
   const GROUND = ["#e6a45a", "#dd9650", "#d28a48", "#c77e40", "#bb7239", "#ad6733", "#9f5c2d"];
   const gh = H - HORIZON;
@@ -191,6 +278,17 @@ export function getBackground() {
     rect(ctx, "#6a4a38", rx, ry, rw, 4);
     rect(ctx, "#8a6650", rx + 1, ry - 1, rw - 2, 2);
   }
+  // extra scenery
+  windmillTower(ctx, 176, HORIZON + 26);
+  wagon(ctx, 196, HORIZON + 46);
+  hitchingPost(ctx, 66, HORIZON + 38);
+  perchedVultures(ctx, 112, HORIZON - 26);
+  skullAndBones(ctx, 236, 172);
+  for (let i = 0; i < 40; i++) {
+    const gx = r() * W, gy = HORIZON + 8 + r() * (H - HORIZON - 12);
+    rect(ctx, "#7a8a3a", gx, gy - 2, 1, 2);
+    rect(ctx, "#9aa84a", gx + 1, gy - 1, 1, 1);
+  }
   bgCache = c;
   return c;
 }
@@ -201,6 +299,41 @@ const clouds = [
 
 export function drawScene(ctx, t, opts = {}) {
   ctx.drawImage(getBackground(), 0, 0);
+  // the sky slowly turns to night as the levels climb
+  if (opts.dusk > 0) {
+    ctx.fillStyle = `rgba(18, 8, 60, ${opts.dusk})`;
+    ctx.fillRect(0, 0, W, HORIZON);
+    ctx.fillStyle = `rgba(18, 8, 60, ${opts.dusk * 0.6})`;
+    ctx.fillRect(0, HORIZON, W, H - HORIZON);
+  }
+  // flickering saloon windows
+  const fl = 0.5 + 0.5 * Math.sin(t * 9) * Math.sin(t * 3.1);
+  ctx.fillStyle = `rgba(255, 205, 90, ${0.45 + 0.3 * fl})`;
+  for (const wx of [26, 72]) ctx.fillRect(wx + 1, 125, 12, 12);
+  // windmill blades
+  const hx = 176, hy = HORIZON + 26 - 32, spin = t * 1.4;
+  for (let k = 0; k < 4; k++) {
+    const a = spin + (k * Math.PI) / 2;
+    for (let d = 2; d <= 12; d++) {
+      const px = hx + Math.cos(a) * d, py = hy + Math.sin(a) * d;
+      rect(ctx, d > 6 ? "#e8dcb0" : "#b9a878", px, py, 1, 1);
+      if (d > 5) rect(ctx, "#e8dcb0", px - Math.sin(a), py + Math.cos(a), 1, 1);
+    }
+  }
+  rect(ctx, "#2a150a", hx - 1, hy - 1, 3, 3);
+  // chimney smoke
+  for (let i = 0; i < 6; i++) {
+    const age = (t * 0.7 + i / 6) % 1;
+    const sx = 80 + Math.sin(age * 6 + i) * 2 + age * 10, sy = 100 - age * 28, sz = 1 + Math.floor(age * 3);
+    ctx.fillStyle = `rgba(225, 205, 225, ${(1 - age) * 0.55})`;
+    ctx.fillRect(Math.round(sx), Math.round(sy), sz, sz);
+  }
+  // drifting dust
+  for (let i = 0; i < 14; i++) {
+    const dx = (i * 37 + t * (6 + (i % 3) * 4)) % W, dy = HORIZON + 8 + ((i * 13) % 46) + Math.sin(t + i) * 2;
+    ctx.fillStyle = "rgba(255, 232, 180, 0.45)";
+    ctx.fillRect(Math.round(dx), Math.round(dy), 1, 1);
+  }
   // twinkle
   const r = rnd(7);
   for (let i = 0; i < 10; i++) {

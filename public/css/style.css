@@ -264,3 +264,20 @@ body.in-game #app { padding-top: 8px; }
 [hidden] { display: none !important; }
 .gbar { padding-right: 190px; }
 @media (max-width: 560px) { .gbar { padding-right: 0; padding-bottom: 44px; } }
+
+/* ---------- extra detailing ---------- */
+.poster::before, .poster::after, .poster .nail-b, .poster .nail-c {
+  content: ""; position: absolute; width: 8px; height: 8px; background: #6b6f78; border: 2px solid var(--ink);
+  box-shadow: inset 1px 1px 0 #c0c4cc; border-radius: 50%;
+}
+.poster::before { top: 8px; left: 8px; } .poster::after { top: 8px; right: 8px; }
+.subtitle::before, .subtitle::after { content: ""; display: inline-block; width: clamp(24px, 8vw, 70px); height: 3px; background: var(--teal); vertical-align: middle; margin: 0 14px; box-shadow: 0 0 8px var(--teal); }
+.plate { position: relative; }
+.plate::before, .plate::after { content: "\2605"; position: absolute; top: 50%; transform: translateY(-50%); color: var(--gold); font-size: 16px; }
+.plate::before { left: 10px; } .plate::after { right: 10px; }
+.banner-in.combo b { color: var(--teal); text-shadow: 2px 2px 0 var(--magenta); }
+.title { animation: glow 3s ease-in-out infinite alternate; }
+@keyframes glow { from { filter: drop-shadow(0 0 4px rgba(255, 140, 60, 0.3)); } to { filter: drop-shadow(0 0 14px rgba(255, 140, 60, 0.8)); } }
+.btn { letter-spacing: 1px; }
+.row:hover { border-color: var(--gold); }
+@media (prefers-reduced-motion: reduce) { .title { animation: none; } }

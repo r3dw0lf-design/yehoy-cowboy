@@ -8,6 +8,8 @@ const app = $("#app");
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtNum = (n) => Number(n || 0).toLocaleString("en-US");
 const DURATIONS = [30, 45, 60, 90, 120, 180, 240, 300];
+const RANKS = [[0, "GREENHORN"], [500, "DEPUTY"], [1500, "RANGER"], [3500, "SHERIFF"], [7000, "MARSHAL"], [12000, "LEGEND"]];
+const rankFor = (score) => RANKS.filter(([min]) => score >= min).pop()[1];
 const fmtDur = (s) => (s >= 60 && s % 60 === 0 ? `${s / 60} min` : `${s}s`);
 
 const S = {
@@ -184,6 +186,7 @@ function renderMenu() {
     <h1 class="title">DUSTY GULCH</h1>
     <div class="subtitle">&#9733; SHOWDOWN &#9733;</div>
     <div class="plate">HOWDY, <b>${esc(u.username)}</b>!<br>
+      RANK <b>${rankFor(u.high_score)}</b><br>
       HIGH SCORE <b>${fmtNum(u.high_score)}</b> &nbsp;|&nbsp; DUELS <b>${u.wins}W ${u.losses}L ${u.draws}D</b></div>
     <nav class="menu">
       <button class="btn gold" id="sp">SINGLE PLAYER</button>
@@ -298,7 +301,7 @@ function startSingle() {
         ov.onclick = (e) => { e.stopPropagation(); S.game && S.game.setPaused(false); };
       } else { ov.hidden = true; ov.onclick = null; }
     },
-    onEnd: async ({ score, kills, level }) => {
+    onEnd: async ({ score, kills, level, shots, hits, bestStreak }) => {
       sfx.gameOver();
       let record = false, high = S.user.high_score;
       try {
@@ -312,7 +315,7 @@ function startSingle() {
       ov.hidden = false; ov.className = "overlay noclick";
       ov.innerHTML = `<h3>OUT OF AMMO!</h3>
         <div class="score-big">${fmtNum(score)}</div>
-        <p>${record ? "&#9733; NEW HIGH SCORE! &#9733;" : `HIGH SCORE: ${fmtNum(high)}`}<br>${kills} birds downed &middot; reached level ${level}</p>
+        <p>${record ? "&#9733; NEW HIGH SCORE! &#9733;" : `HIGH SCORE: ${fmtNum(high)}`}<br>RANK: <b style="color:var(--gold);font-weight:400">${rankFor(score)}</b><br>${kills} birds downed &middot; level ${level} &middot; accuracy ${shots ? Math.round((hits / shots) * 100) : 0}% &middot; best streak ${bestStreak}</p>
         <div class="btns"><button class="btn gold" id="again">PLAY AGAIN</button><button class="btn" id="menuB">BACK TO TOWN</button></div>`;
       $("#again").onclick = () => { sfx.click(); go("single"); };
       $("#menuB").onclick = () => go("menu");
@@ -548,7 +551,7 @@ function renderDuel({ duel }) {
       <div id="banner"></div>
       <div class="overlay noclick" id="ov" hidden></div>
     </div>
-    <div class="gbar"><span></span><p class="hint">Same birds for both of you &middot; out of ammo = 2.5s reload &middot; most points wins</p></div>
+    <div class="gbar"><span></span><p class="hint">Same birds for both of you &middot; out of ammo = 2s reload &middot; most points wins</p></div>
   </div>`;
 
   const ov = $("#ov");
