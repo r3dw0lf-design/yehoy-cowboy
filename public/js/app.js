@@ -193,9 +193,9 @@ function renderAuth(mode = "login") {
     try {
       const r = signup ? await api.signup(u, p) : await api.login(u, p);
       S.user = r.user;
-      await loadArmory();
       startPolling();
       go("menu");
+      loadArmory().then(refreshPlate);
     } catch (ex) {
       err.textContent = ex.message;
       btn.disabled = false;
@@ -205,16 +205,24 @@ function renderAuth(mode = "login") {
 }
 
 // ---------------- MENU ----------------
-function renderMenu() {
+function plateHtml() {
   const u = S.user;
+  return `HOWDY, <b>${esc(u.username)}</b>!<br>
+      RANK <b>${rankFor(u.high_score)}</b><br>
+      COINS <b>${fmtNum(u.coins)}</b> &nbsp;|&nbsp; GUN <b>${esc(GUNS[loadout().id].name.toUpperCase())}</b><br>
+      HIGH SCORE <b>${fmtNum(u.high_score)}</b> &nbsp;|&nbsp; DUELS <b>${u.wins}W ${u.losses}L ${u.draws}D</b>`;
+}
+function refreshPlate() {
+  const p = $("#plate");
+  if (p && S.user) p.innerHTML = plateHtml();
+}
+
+function renderMenu() {
   app.innerHTML = `
   <main class="center">
     <h1 class="title">DUSTY GULCH</h1>
     <div class="subtitle">&#9733; SHOWDOWN &#9733;</div>
-    <div class="plate">HOWDY, <b>${esc(u.username)}</b>!<br>
-      RANK <b>${rankFor(u.high_score)}</b><br>
-      COINS <b>${fmtNum(u.coins)}</b> &nbsp;|&nbsp; GUN <b>${esc(GUNS[loadout().id].name.toUpperCase())}</b><br>
-      HIGH SCORE <b>${fmtNum(u.high_score)}</b> &nbsp;|&nbsp; DUELS <b>${u.wins}W ${u.losses}L ${u.draws}D</b></div>
+    <div class="plate" id="plate">${plateHtml()}</div>
     <nav class="menu">
       <button class="btn gold" id="sp">SINGLE PLAYER</button>
       <button class="btn red" id="mp">MULTIPLAYER<span class="badge" id="mpBadge" hidden></span></button>
@@ -468,18 +476,24 @@ function renderHub() {
   draw();
   pollOnce();
 
-  app.onclick = async (e) => {
+  app.onclick = (e) => {
     const b = e.target.closest("button[data-a]");
     if (!b) return;
-    const id = +b.dataset.id;
-    b.disabled = true;
-    try {
-      if (b.dataset.a === "acc") { await api.respond(id, true); sfx.click(); go("lobby", { id }); return; }
-      if (b.dataset.a === "dec") await api.respond(id, false);
-      if (b.dataset.a === "cancel") await api.cancel(id);
-      if (b.dataset.a === "enter") { go("lobby", { id }); return; }
-      await pollOnce();
-    } catch (ex) { toast(esc(ex.message), { kind: "err" }); await pollOnce(); }
+    const id = +b.dataset.id, act = b.dataset.a;
+    const row = b.closest(".row");
+    sfx.click();
+    if (act === "enter") return go("lobby", { id });
+    if (act === "acc") {
+      // can't open the lobby before the server says yes, so show it working right away
+      b.disabled = true; b.textContent = "...";
+      api.respond(id, true).then(() => go("lobby", { id })).catch((ex) => { toast(esc(ex.message), { kind: "err" }); pollOnce(); });
+      return;
+    }
+    // decline / cancel / call off: the row disappears instantly
+    if (row) row.remove();
+    (act === "dec" ? api.respond(id, false) : api.cancel(id))
+      .then(pollOnce)
+      .catch((ex) => { toast(esc(ex.message), { kind: "err" }); pollOnce(); });
   };
 }
 
@@ -518,10 +532,12 @@ function renderLobby({ id }) {
       </div>
     </section>
   </main>`;
-  let started = false, lastGun = null, lastSig = "";
+  let started = false, lastGun = null, lastSig = "", readyLock = 0;
   const sel = $("#gunSel");
 
   const paint = (d) => {
+    // while a Ready click is in flight, trust what you just clicked over the (older) server answer
+    if (Date.now() < readyLock) d = { ...d, you: { ...d.you, ready: S.lobbyReady } };
     // gun picker: options are the guns both players own
     const common = d.commonGuns || ["rifle"];
     const sig = common.join(",");
@@ -569,6 +585,7 @@ function renderLobby({ id }) {
       go("hub");
       return;
     }
+    lastView = d;
     paint(d);
   };
 
@@ -577,14 +594,24 @@ function renderLobby({ id }) {
   every(refresh, 1200);
   every(() => { if (S.lobbyReady && !started) api.ready(id, true).catch(() => {}); }, 10000); // keep "ready" fresh
 
-  $("#rdy").onclick = async () => {
+  let lastView = null;
+  const origPaint = paint;
+  $("#rdy").onclick = () => {
     sfx.click();
-    try { const r = await api.ready(id, !S.lobbyReady); handle(r.duel); } catch (e) { toast(esc(e.message), { kind: "err" }); }
+    const want = !S.lobbyReady;
+    S.lobbyReady = want;
+    readyLock = Date.now() + 2500;
+    if (lastView) origPaint(lastView); // instant: button + your card change this very frame
+    api.ready(id, want).then((r) => handle(r.duel)).catch((e) => { readyLock = 0; toast(esc(e.message), { kind: "err" }); });
   };
-  sel.onchange = async () => {
+  sel.onchange = () => {
     sfx.click();
     lastGun = sel.value;
-    try { handle((await api.duelGun(id, sel.value)).duel); } catch (e) { toast(esc(e.message), { kind: "err" }); }
+    const pv = $("#gpv");
+    pv.dataset.gun = sel.value; pv.dataset.skin = skinFor(sel.value);
+    previewGun(pv, sel.value, pv.dataset.skin); // instant preview
+    $("#gunNote").textContent = GUNS[sel.value].perk;
+    api.duelGun(id, sel.value).then((r) => handle(r.duel)).catch((e) => { toast(esc(e.message), { kind: "err" }); refresh(); });
   };
   $("#leave").onclick = () => go("hub");
   $("#callOff").onclick = async () => {
@@ -710,7 +737,10 @@ function renderDuel({ duel }) {
 
 
 // ---------------- GUN SMITH: armory + shop ----------------
-async function renderArmory({ tab = "armory" } = {}) {
+// Everything here updates on screen instantly from local data. The server is
+// told in the background, and the screen is corrected only if it disagrees.
+function renderArmory({ tab = "armory" } = {}) {
+  let curTab = tab;
   app.innerHTML = `
   <main class="center">
     <h1 class="title small">GUN SMITH</h1>
@@ -719,20 +749,19 @@ async function renderArmory({ tab = "armory" } = {}) {
       <button class="btn small ${tab === "armory" ? "gold" : ""}" id="tA">MY ARMORY</button>
       <button class="btn small ${tab === "shop" ? "gold" : ""}" id="tS">GUN SHOP</button>
     </div>
-    <div class="guncards" id="cards"><div class="panel">Loading...</div></div>
+    <div class="guncards" id="cards"></div>
     <p><button class="btn" id="back">&laquo; BACK TO TOWN</button></p>
   </main>`;
   $("#back").onclick = () => go("menu");
-  $("#tA").onclick = () => { sfx.click(); go("armory", { tab: "armory" }); };
-  $("#tS").onclick = () => { sfx.click(); go("armory", { tab: "shop" }); };
-  await loadArmory();
-  if (!S.armory) { $("#cards").innerHTML = `<div class="panel">Couldn't load your guns. Try again.</div>`; return; }
 
   const draw = () => {
     const A = S.armory;
+    if (!A) { $("#cards").innerHTML = `<div class="panel">Loading your guns...</div>`; return; }
     $("#coinBar").innerHTML = `YOUR COINS <b>${fmtNum(A.coins)}</b><br><small>Earn coins: 1 per 10 points in single player &middot; duels pay 50-150 + points/20</small>`;
+    $("#tA").classList.toggle("gold", curTab === "armory");
+    $("#tS").classList.toggle("gold", curTab === "shop");
     let html = "";
-    if (tab === "armory") {
+    if (curTab === "armory") {
       html = A.guns.map((g) => {
         const def = GUNS[g.id], eq = A.equipped === g.id, next = upgradeCost(g.id, g.level);
         return `<article class="gun-card ${eq ? "eq" : ""}">
@@ -743,9 +772,9 @@ async function renderArmory({ tab = "armory" } = {}) {
           <p class="perk">${esc(def.perk)}</p>
           ${barsHtml(gunStats(g.id, g.level))}
           <span class="lbl">SKINS</span>
-          <div class="chips">${SKIN_ORDER.map((s) => {
-            const own = g.skins.includes(s);
-            return `<button class="chip ${g.skin === s ? "on" : ""}" data-act="skin" data-gun="${g.id}" data-skin="${s}">${esc(SKINS[s].name)}${own ? "" : ` &middot; ${SKINS[s].price}c`}</button>`;
+          <div class="chips">${SKIN_ORDER.map((sk) => {
+            const own = g.skins.includes(sk);
+            return `<button class="chip ${g.skin === sk ? "on" : ""}" data-act="skin" data-gun="${g.id}" data-skin="${sk}">${esc(SKINS[sk].name)}${own ? "" : ` &middot; ${SKINS[sk].price}c`}</button>`;
           }).join("")}</div>
           <div class="gc-acts">
             <button class="btn small ${eq ? "" : "green"}" data-act="equip" data-gun="${g.id}" ${eq ? "disabled" : ""}>${eq ? "EQUIPPED" : "EQUIP"}</button>
@@ -768,35 +797,77 @@ async function renderArmory({ tab = "armory" } = {}) {
     $("#cards").innerHTML = html;
     paintPreviews($("#cards"));
   };
-  draw();
 
-  $("#cards").onclick = async (e) => {
+  // switching tabs only swaps the cards: no navigation, no loading box, no layout jump
+  $("#tA").onclick = () => { if (curTab !== "armory") { sfx.click(); curTab = "armory"; draw(); } };
+  $("#tS").onclick = () => { if (curTab !== "shop") { sfx.click(); curTab = "shop"; draw(); } };
+
+  // show what we already have this very frame, then quietly check with the server
+  draw();
+  const before = JSON.stringify(S.armory);
+  loadArmory().then(() => { if (S.screen === "armory" && JSON.stringify(S.armory) !== before) draw(); });
+
+  // optimistic update: change local data + redraw now, confirm with the server after
+  let inFlight = 0, overlapped = false;
+  const commit = (apply, call) => {
+    const backup = JSON.stringify(S.armory);
+    apply(S.armory);
+    S.user.coins = S.armory.coins;
+    draw();
+    if (++inFlight > 1) overlapped = true;
+    call().then((r) => {
+      if (--inFlight > 0) return;
+      if (overlapped) { overlapped = false; return loadArmory().then(() => S.screen === "armory" && draw()); }
+      if (JSON.stringify(r) !== JSON.stringify(S.armory)) { S.armory = r; S.user.coins = r.coins; if (S.screen === "armory") draw(); }
+    }).catch((ex) => {
+      inFlight = Math.max(0, inFlight - 1);
+      toast(esc(ex.message), { kind: "err" });
+      S.armory = JSON.parse(backup); S.user.coins = S.armory.coins;
+      if (S.screen === "armory") draw();
+      loadArmory().then(() => S.screen === "armory" && draw());
+    });
+  };
+
+  $("#cards").onclick = (e) => {
     const b = e.target.closest("button[data-act]");
     if (!b || b.disabled) return;
-    const act = b.dataset.act, gun = b.dataset.gun;
-    try {
-      if (act === "buy") {
-        if (S.armory.coins < GUNS[gun].price) return toast(`You need <b>${fmtNum(GUNS[gun].price - S.armory.coins)}</b> more coins for the ${esc(GUNS[gun].name)}.`, { kind: "err" });
-        S.armory = await api.buy(gun); sfx.ammo();
-        toast(`You bought the <b>${esc(GUNS[gun].name)}</b>! Find it in your armory.`, { ms: 3000 });
-      } else if (act === "upgrade") {
-        S.armory = await api.upgrade(gun); sfx.level();
-      } else if (act === "equip") {
-        S.armory = await api.equip(gun); sfx.click();
-      } else if (act === "skin") {
-        const g = ownedGun(gun), skin = b.dataset.skin;
-        if (!g.skins.includes(skin)) {
-          if (S.armory.coins < SKINS[skin].price) return toast(`You need <b>${fmtNum(SKINS[skin].price - S.armory.coins)}</b> more coins for that skin.`, { kind: "err" });
-          if (!confirm(`Buy the ${SKINS[skin].name} skin for ${SKINS[skin].price} coins?`)) return;
-          sfx.ammo();
-        } else sfx.click();
-        S.armory = await api.skin(gun, skin);
+    const act = b.dataset.act, gun = b.dataset.gun, A = S.armory;
+    const need = (cost) => toast(`You need <b>${fmtNum(cost - A.coins)}</b> more coins for that.`, { kind: "err", ms: 3000 });
+    if (act === "buy") {
+      const price = GUNS[gun].price;
+      if (A.coins < price) return need(price);
+      sfx.ammo();
+      toast(`You bought the <b>${esc(GUNS[gun].name)}</b>! Find it in your armory.`, { ms: 3000 });
+      commit((a) => {
+        a.coins -= price;
+        a.guns.push({ id: gun, level: 1, skin: "classic", skins: ["classic"] });
+        a.guns.sort((x, y) => GUN_ORDER.indexOf(x.id) - GUN_ORDER.indexOf(y.id));
+      }, () => api.buy(gun));
+    } else if (act === "upgrade") {
+      const g = ownedGun(gun), cost = upgradeCost(gun, g.level);
+      if (cost === null) return;
+      if (A.coins < cost) return need(cost);
+      sfx.level();
+      commit((a) => { a.coins -= cost; a.guns.find((x) => x.id === gun).level++; }, () => api.upgrade(gun));
+    } else if (act === "equip") {
+      sfx.click();
+      commit((a) => { a.equipped = gun; }, () => api.equip(gun));
+    } else if (act === "skin") {
+      const g = ownedGun(gun), skin = b.dataset.skin;
+      if (g.skin === skin) return;
+      if (g.skins.includes(skin)) {
+        sfx.click();
+        commit((a) => { a.guns.find((x) => x.id === gun).skin = skin; }, () => api.skin(gun, skin));
+      } else {
+        const price = SKINS[skin].price;
+        if (A.coins < price) return need(price);
+        if (!confirm(`Buy the ${SKINS[skin].name} skin for ${price} coins?`)) return;
+        sfx.ammo();
+        commit((a) => {
+          const x = a.guns.find((q) => q.id === gun);
+          a.coins -= price; x.skins.push(skin); x.skin = skin;
+        }, () => api.skin(gun, skin));
       }
-      S.user.coins = S.armory.coins;
-      draw();
-    } catch (ex) {
-      toast(esc(ex.message), { kind: "err" });
-      await loadArmory(); draw();
     }
   };
 }
@@ -807,9 +878,9 @@ async function renderArmory({ tab = "armory" } = {}) {
     const r = await api.me();
     S.user = r.user;
     S.offset = r.serverTime - Date.now();
-    await loadArmory();
     startPolling();
     go("menu");
+    loadArmory().then(refreshPlate);
   } catch {
     go("auth");
   }

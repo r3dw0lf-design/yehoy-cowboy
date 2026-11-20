@@ -315,3 +315,15 @@ select {
   border: 3px solid var(--wood-d); border-radius: 0; min-width: 220px; max-width: 100%; cursor: pointer;
 }
 select:focus { outline: none; border-color: var(--magenta); }
+
+/* ---------- smoothness ---------- */
+html { overflow-y: scroll; scrollbar-gutter: stable; }      /* the scrollbar never appears/disappears, so nothing jumps */
+#bg { width: 100%; height: 100%; will-change: transform; transform: translateZ(0); }
+.crt { contain: strict; }
+.title { animation: none !important; }                       /* animating a blur filter forced a repaint every frame */
+.btn:hover { filter: none; }
+.btn::after { content: ""; position: absolute; inset: 0; background: rgba(255, 255, 255, 0.14); opacity: 0; pointer-events: none; }
+.btn:hover::after { opacity: 1; }
+.btn:disabled::after { display: none; }
+.btn, .chip, .row, .gun-card { transition: none; }
+.btn:active { transition: none; }

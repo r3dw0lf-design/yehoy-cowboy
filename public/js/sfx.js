@@ -110,13 +110,16 @@ function tone(freq, start, dur, type = "square", vol = 0.12, slideTo = null) {
   o.stop(t + dur + 0.02);
 }
 
+let shotBuf = null;
+
 export const sfx = {
   shoot() {
     if (!sfxOn) return;
     const c = ensureCtx();
     if (!c) return;
     const src = c.createBufferSource();
-    src.buffer = noiseBuffer(c, 0.35);
+    shotBuf = shotBuf || noiseBuffer(c, 0.35);
+    src.buffer = shotBuf;
     const f = c.createBiquadFilter();
     f.type = "lowpass";
     f.frequency.setValueAtTime(5000, c.currentTime);
