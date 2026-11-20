@@ -30,7 +30,7 @@ body {
 
 #bg {
   position: fixed; inset: 0; width: 100vw; height: 100vh;
-  image-rendering: pixelated; object-fit: cover; z-index: 0;
+  image-rendering: pixelated; object-fit: cover; object-position: 50% 82%; z-index: 0;
 }
 body.in-game #bg { display: none; }
 

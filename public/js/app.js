@@ -1,7 +1,7 @@
 import { api } from "./api.js";
 import { audio, sfx, playTrack } from "./sfx.js";
 import { Game } from "./game.js";
-import { drawScene } from "./scene.js";
+import { drawBackdrop } from "./backdrop.js";
 import { GUNS, GUN_ORDER, SKINS, SKIN_ORDER, MAX_LEVEL, gunStats, statBars, upgradeCost, duelCoins } from "./guns.js";
 import { previewGun } from "./guns-art.js";
 
@@ -56,7 +56,7 @@ let bgLast = 0;
 function bgLoop(ts) {
   if (!document.body.classList.contains("in-game") && ts - bgLast > 50) {
     bgLast = ts;
-    drawScene(bgCtx, ts / 1000);
+    drawBackdrop(bgCtx, ts / 1000);
   }
   requestAnimationFrame(bgLoop);
 }
