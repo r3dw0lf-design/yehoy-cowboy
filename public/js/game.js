@@ -1,7 +1,8 @@
 // The bird-shooting game. One engine for single player and duels.
 // Birds move as a pure function of time, so in a duel both players see the
 // exact same birds at the exact same moment (same seed + synced clock).
-import { W, H, HORIZON, drawScene } from "./scene.js";
+import { W, H, HORIZON } from "./scene.js";
+import { drawSunset, SUNSET_W, SUNSET_H } from "./sunset.js";
 import { BIRD_TYPES, getSprite, spriteSize, drawText, textWidth } from "./sprites.js";
 import { sfx } from "./sfx.js";
 import { gunStats } from "./guns.js";
@@ -103,6 +104,16 @@ export class Game {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.ctx.imageSmoothingEnabled = false;
+    // animated sunset backdrop lives on its own canvas behind the game canvas
+    this.bgCanvas = document.createElement("canvas");
+    this.bgCanvas.width = SUNSET_W;
+    this.bgCanvas.height = SUNSET_H;
+    this.bgCanvas.className = "stage-bg";
+    this.bgCanvas.setAttribute("aria-hidden", "true");
+    canvas.parentNode.insertBefore(this.bgCanvas, canvas);
+    this.bgCtx = this.bgCanvas.getContext("2d");
+    this.bgCtx.imageSmoothingEnabled = false;
+    this.bgLast = -1;
     this.o = opts;
     this.mode = opts.mode;
     this.score = 0;
@@ -174,6 +185,7 @@ export class Game {
     window.removeEventListener("keydown", this._onKey);
     document.removeEventListener("visibilitychange", this._onVis);
     this.dead = true;
+    if (this.bgCanvas) this.bgCanvas.remove();
   }
 
   rollNeed() { return 2 + Math.floor(this.rng() * 3); } // 2..4 kills until a supply drop
@@ -440,7 +452,18 @@ export class Game {
     ctx.imageSmoothingEnabled = false;
     ctx.save();
     if (this.shake > 0.05) ctx.translate(Math.round((Math.random() - 0.5) * 3 * this.shake), Math.round((Math.random() - 0.5) * 3 * this.shake));
-    drawScene(ctx, this.animT, { dusk: Math.min(0.5, (this.level - 1) * 0.05) });
+    // sunset backdrop (~30fps is plenty), then the game draws on a transparent canvas
+    if (this.animT - this.bgLast > 0.033 || this.animT < this.bgLast) {
+      this.bgLast = this.animT;
+      drawSunset(this.bgCtx, this.animT);
+      // the sky slowly turns to night as the levels climb
+      const dusk = Math.min(0.5, (this.level - 1) * 0.05);
+      if (dusk > 0) {
+        this.bgCtx.fillStyle = `rgba(18, 8, 60, ${dusk})`;
+        this.bgCtx.fillRect(0, 0, SUNSET_W, SUNSET_H);
+      }
+    }
+    ctx.clearRect(-8, -8, W + 16, H + 16);
     const t = this.t;
     const nowMs = performance.now();
 
