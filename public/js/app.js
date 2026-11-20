@@ -312,7 +312,7 @@ function showStartOverlay() {
     <p>Shoot the birds out of the sky! Your bullets are limited, but every few kills a supply drop gives you more.
     Hit streaks multiply your points, and every level brings faster, bigger birds.</p>
     ${LEGEND}
-    <div class="loadout"><canvas class="gpv" width="100" height="44" data-gun="${lo.id}" data-skin="${lo.skin}"></canvas>
+    <div class="loadout"><canvas class="gpv" width="112" height="48" data-gun="${lo.id}" data-skin="${lo.skin}"></canvas>
       <div><b>${esc(GUNS[lo.id].name)}</b> <small>LV ${lo.level}</small><br><button class="btn small" id="chg">CHANGE GUN</button></div></div>
     <button class="btn gold" id="start">CLICK TO START</button>`;
   paintPreviews(ov);
@@ -521,7 +521,7 @@ function renderLobby({ id }) {
       <div class="gunpick">
         <span class="lbl">DUEL GUN <small>(only guns you BOTH own)</small></span>
         <div class="gp-row"><select id="gunSel" aria-label="Duel gun"></select>
-          <canvas class="gpv" id="gpv" width="100" height="44"></canvas></div>
+          <canvas class="gpv" id="gpv" width="112" height="48"></canvas></div>
         <div class="hint" id="gunNote">Same gun for both gunslingers at level-1 stats, so it's a fair fight. Your skin stays yours.</div>
       </div>
       <p class="hint" style="text-align:center" id="tip">Both gunslingers hit READY and the duel starts after a short countdown.</p>
@@ -766,7 +766,7 @@ function renderArmory({ tab = "armory" } = {}) {
         const def = GUNS[g.id], eq = A.equipped === g.id, next = upgradeCost(g.id, g.level);
         return `<article class="gun-card ${eq ? "eq" : ""}">
           ${eq ? `<div class="ribbon">EQUIPPED</div>` : ""}
-          <canvas class="gpv" width="100" height="44" data-gun="${g.id}" data-skin="${g.skin}"></canvas>
+          <canvas class="gpv" width="112" height="48" data-gun="${g.id}" data-skin="${g.skin}"></canvas>
           <h3>${esc(def.name)} <small>${esc(def.type)}</small></h3>
           <div class="lvl">LEVEL ${g.level} / ${MAX_LEVEL} <span class="pips">${Array.from({ length: MAX_LEVEL }, (_, i) => `<i class="${i < g.level ? "on" : ""}"></i>`).join("")}</span></div>
           <p class="perk">${esc(def.perk)}</p>
@@ -786,7 +786,7 @@ function renderArmory({ tab = "armory" } = {}) {
       html = forSale.map((id) => {
         const def = GUNS[id];
         return `<article class="gun-card">
-          <canvas class="gpv" width="100" height="44" data-gun="${id}" data-skin="classic"></canvas>
+          <canvas class="gpv" width="112" height="48" data-gun="${id}" data-skin="classic"></canvas>
           <h3>${esc(def.name)} <small>${esc(def.type)}</small></h3>
           <p class="perk">${esc(def.perk)}</p>
           ${barsHtml(gunStats(id, 1))}

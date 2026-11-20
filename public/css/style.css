@@ -297,7 +297,7 @@ body.in-game #app { padding-top: 8px; }
 .gun-card .gc-acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 .gun-card .gc-acts .btn { flex: 1; min-width: 110px; }
 .ribbon { position: absolute; top: -4px; right: -4px; background: var(--gold); color: #3a1f0e; font-size: 8px; padding: 6px 8px; border: 3px solid var(--ink); }
-canvas.gpv { display: block; width: 100%; height: auto; aspect-ratio: 100 / 44; image-rendering: pixelated; background: radial-gradient(ellipse at center, #3d2112 0, #1f0f06 100%); border: 3px solid var(--wood-dd); }
+canvas.gpv { display: block; width: 100%; height: auto; aspect-ratio: 112 / 48; image-rendering: auto; background: radial-gradient(ellipse at center, #3d2112 0, #1f0f06 100%); border: 3px solid var(--wood-dd); }
 canvas.gpv#gpv, .loadout canvas.gpv { width: 160px; }
 .stat { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 8px; margin: 5px 0; }
 .pips { display: inline-flex; gap: 2px; }
