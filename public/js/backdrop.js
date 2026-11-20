@@ -127,7 +127,6 @@ function saloon(){return spr(152,152,g=>{g.translate(-14,-96);
  rc(g,72,234,38,2,'#7d4a2b');
  for(const x of[26,70,107,148]){wood(g,x,185,5,51,1,x,5);rc(g,x-1,185,7,3,'#2a150f');rc(g,x-1,185,7,1,'#e8b030')}
  wood(g,14,236,152,10,0,5,5);rc(g,14,236,152,1,'#d9a060');rc(g,14,241,152,1,'#2a150f');
- for(const x of[79,103]){ln(g,x,185,x,190,'#2a150f');rc(g,x-3,190,7,2,'#2a150f');rc(g,x-2,192,5,7,'#ffd35e');rc(g,x-1,193,3,4,'#fff4b0');rc(g,x-3,192,1,7,'#3b2014');rc(g,x+3,192,1,7,'#3b2014');rc(g,x-3,199,7,2,'#2a150f')}
  rc(g,145,118,1,56,'#d98a50')})}
 
 /* ---------- compose the static scene ---------- */
@@ -185,6 +184,14 @@ function devil(g,t){const x=((t*12)%(W+160))-80,y=206+Math.sin(t*.3)*8;
  g.globalAlpha=1;rc(g,x-3,y,7,1,'rgba(240,200,140,.35)')}
 function shoot(g,t){const c=Math.floor(t/9),l=t-c*9;if(l>.8)return;const u=l/.8,x0=60+hs(c,3)*300,y0=8+hs(c,4)*30;
  for(let k=0;k<9;k++){const v=Math.max(0,u-k*.035);g.globalAlpha=(1-k/9)*.9;px(g,x0+v*90,y0+v*38,k?'#ffd8a0':'#ffffff')}g.globalAlpha=1}
+
+function lanterns(g,t){for(const x0 of[79,103]){const sw=Math.round(Math.sin(t*1.6+x0)*1.4),x=x0+sw;ln(g,x0,185,x,190,'#2a150f');rc(g,x-3,190,7,2,'#2a150f');rc(g,x-2,192,5,7,'#ffd35e');rc(g,x-1,193,3,4,'#fff4b0');rc(g,x-3,192,1,7,'#3b2014');rc(g,x+3,192,1,7,'#3b2014');rc(g,x-3,199,7,2,'#2a150f')}}
+function notes(g,t){for(let i=0;i<3;i++){const a=(t*.4+i/3)%1,x=132+Math.sin(a*7+i*2)*5+a*8,y=196-a*30;g.globalAlpha=Math.min(1,(1-a)*1.6);rc(g,x,y+3,3,2,'#ffe9a0');rc(g,x+2,y-1,1,5,'#ffe9a0');if(i%2)rc(g,x+2,y-1,3,1,'#ffe9a0')}g.globalAlpha=1}
+function lizard(g,t){const c=Math.floor(t/26),l=t-c*26;if(l>8)return;const x=hs(c,2)*120+l*40,y=243+Math.floor(hs(c,5)*6),f=Math.floor(t*14)%2;
+ rc(g,x,y+3,9,1,'rgba(30,8,40,.4)');rc(g,x,y,6,2,'#5a6a24');rc(g,x+6,y,3,2,'#7a8a34');px(g,x+8,y,'#ffe27a');ln(g,x,y+1,x-6,y+(f?0:2),'#5a6a24');px(g,x+1,y+2+f,'#3a4a18');px(g,x+4,y+2+(1-f),'#3a4a18')}
+function flock(g,t){const c=Math.floor(t/30),l=t-c*30;if(l>14)return;const x0=-30+l*(W+60)/14,y0=96+hs(c,6)*18;
+ for(let i=0;i<6;i++){const x=x0-i*7+(i%2)*3,y=y0+(i%2?3:0)+i*.8+Math.sin(t*1.5+i)*1.5;g.globalAlpha=.75;for(const[dx,dy]of VU[Math.sin(t*9+i)>0?0:1])px(g,x+dx*.5,y+dy*.5,'#2a1233')}g.globalAlpha=1}
+function blit(d,t,oy){d.drawImage(BUF,0,0,W,HZ-12,0,oy,W,HZ-12);for(let y=HZ-12;y<HZ+10;y++)d.drawImage(BUF,0,y,W,1,Math.round(Math.sin(t*3+y*.9)*(1-Math.abs(y-HZ)/14)*1.3),y+oy,W,1);d.drawImage(BUF,0,HZ+10,W,H-HZ-10,0,HZ+10+oy,W,H-HZ-10)}
 function init(){
  SKY=mkSky();{const m=mkMid();MIDB=m.back;MIDF=m;}CROW=crow();BUF=mk(W,H);bg=BUF.getContext('2d');
  stars=Array.from({length:110},()=>({x:R()*W|0,y:R()*(HZ-75)|0,p:R()*6.28,s:1+R()*3,b:R()>.92}));
@@ -194,16 +201,16 @@ function init(){
 }
 export const BACKDROP_W=W,BACKDROP_H=H;
 // ctx: the 512x256 #bg canvas context, t: seconds
-export function drawBackdrop(ctx,t){
- if(!SKY){init();ctx.imageSmoothingEnabled=false}
- if(RM)t=3;
+function compose(t){
+ if(!SKY)init();
+ if(nx-t>1)nx=t;
  const dt=Math.min(.1,Math.max(0,t-pt));pt=t;const g=bg;g.drawImage(SKY,0,0);
  for(const s of stars){const a=.5+.5*Math.sin(t*s.s+s.p);g.globalAlpha=.25+.75*a;rc(g,s.x,s.y,1,1,s.b?'#fff0b0':'#cfd8ff');if(s.b&&a>.75){g.globalAlpha=.6;rc(g,s.x-1,s.y,3,1,'#fff0b0');rc(g,s.x,s.y-1,1,3,'#fff0b0')}}g.globalAlpha=1;
  shoot(g,t);
  for(const c of CL)g.drawImage(c.s,Math.floor((c.x+t*c.v)%(W+300))-150,c.y);
  [0,1].forEach(k=>{const a=t*.25+k*2.6,x=170+Math.cos(a)*70,y=62+k*14+Math.sin(a)*13;for(const[dx,dy]of VU[Math.sin(t*5+k)>0?0:1])px(g,x+dx,y+dy,'#1a0b24');px(g,x,y+1,'#1a0b24')});
  {const a=.05+.035*Math.sin(t*.9),r=SUN.r+8;for(let dy=-r;dy<=0;dy++){const w=Math.sqrt(r*r-dy*dy);rc(g,SUN.x-w,SUN.y+dy,w*2,1,`rgba(255,210,110,${a})`)}}
- g.drawImage(MIDB,0,0);train(g,t);g.drawImage(MIDF,0,0);crows(g,t);doors(g,t);
+ flock(g,t);g.drawImage(MIDB,0,0);train(g,t);g.drawImage(MIDF,0,0);crows(g,t);doors(g,t);lanterns(g,t);notes(g,t);
  if(t>nx){sm.push({x:124,y:85,a:0});nx=t+.22}
  for(let i=sm.length-1;i>=0;i--){const p=sm[i];p.a+=dt;p.x-=dt*(5+p.a*5);p.y-=dt*(8+p.a*3);if(p.a>3.5){sm.splice(i,1);continue}rc(g,p.x,p.y,2+Math.floor(p.a*3),2+Math.floor(p.a*3),`rgba(196,176,206,${(1-p.a/3.5)*.5})`)}
  const f1=.82+.18*Math.sin(t*9)+.08*Math.sin(t*23+1),f2=.82+.18*Math.sin(t*8+2)+.08*Math.sin(t*19);
@@ -212,9 +219,21 @@ export function drawBackdrop(ctx,t){
  for(let n=0;n<4;n++){const a=t*.7+n*Math.PI/2,cx=452,cy=142,ca=Math.cos(a),sa=Math.sin(a);ln(g,cx,cy,cx+ca*16,cy+sa*16,'#1c0a24');ln(g,cx+1,cy,cx+1+ca*16,cy+sa*16,ca>0?'#c8603c':'#1c0a24')}
  rc(g,451,141,3,3,'#3a1a44');
  const cy=Math.floor(t*38/(W+80)),tx=W+30-(t*38)%(W+80),lane=206+hs(cy,5)*26,bn=Math.abs(Math.sin(t*4.2))*9;
- rc(g,tx+4,lane+19,12,2,'rgba(40,10,40,.35)');g.drawImage(tws[Math.floor(t*9)%8],Math.floor(tx),Math.floor(lane-bn));
- tufts(g,t);devil(g,t);
+ rc(g,tx+4,lane+19,12,2,'rgba(40,10,40,.35)');g.drawImage(tws[Math.floor(t*9)%8],Math.floor(tx),Math.floor(lane-bn));if(bn<1.5){g.globalAlpha=.4;for(let i=0;i<4;i++)rc(g,tx+6-i*3,lane+17-i%2,2,2,'#e8c490');g.globalAlpha=1}
+ tufts(g,t);lizard(g,t);devil(g,t);
  for(const m of MO){const x=((m.x-t*m.v)%W+W)%W,y=m.y+Math.sin(t*m.f+m.p)*4;g.globalAlpha=.2+.4*Math.pow(Math.sin(t*m.f*2+m.p),2);rc(g,x,y,1,1,'#ffd890')}g.globalAlpha=1;
- ctx.drawImage(BUF,0,0,W,HZ-12,0,0,W,HZ-12);
- for(let y=HZ-12;y<HZ+10;y++)ctx.drawImage(BUF,0,y,W,1,Math.round(Math.sin(t*3+y*.9)*(1-Math.abs(y-HZ)/14)*1.3),y,W,1);
- ctx.drawImage(BUF,0,HZ+10,W,H-HZ-10,0,HZ+10,W,H-HZ-10)}
+}
+
+// menu screens: 512x256 canvas, t in seconds
+export function drawBackdrop(ctx,t){if(RM)t=3;compose(t);ctx.imageSmoothingEnabled=false;blit(ctx,t,0)}
+
+// in-game: same scene, rendered 16:9 (512x288) and smoothly shrunk to the 320x180 game canvas
+const GT=mk(W,H+32),GTC=GT.getContext('2d'),GS=mk(320,180),GSC=GS.getContext('2d');let gLast=-9,gDusk=-1;
+export function drawBackdropGame(ctx,t,opts={}){if(RM)t=3;const d=opts.dusk||0;
+ if(Math.abs(t-gLast)>=1/30||d!==gDusk||t<gLast){compose(t);gLast=t;gDusk=d;
+  GTC.drawImage(SKY,0,0,W,1,0,0,W,32);
+  for(let i=0;i<34;i++){const s=stars[i];GTC.globalAlpha=.3+.7*(.5+.5*Math.sin(t*s.s+s.p));rc(GTC,s.x,(s.y*7)%32,1,1,'#cfd8ff')}GTC.globalAlpha=1;
+  blit(GTC,t,32);
+  if(d>0){GTC.fillStyle=`rgba(18,8,60,${d})`;GTC.fillRect(0,0,W,HZ+32);GTC.fillStyle=`rgba(18,8,60,${d*.6})`;GTC.fillRect(0,HZ+32,W,H-HZ)}
+  GSC.imageSmoothingEnabled=true;GSC.imageSmoothingQuality='high';GSC.drawImage(GT,0,0,320,180)}
+ ctx.drawImage(GS,0,0)}

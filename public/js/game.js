@@ -1,7 +1,8 @@
 // The bird-shooting game. One engine for single player and duels.
 // Birds move as a pure function of time, so in a duel both players see the
 // exact same birds at the exact same moment (same seed + synced clock).
-import { W, H, HORIZON, drawScene } from "./scene.js";
+import { W, H, HORIZON } from "./scene.js";
+import { drawBackdropGame } from "./backdrop.js";
 import { BIRD_TYPES, getSprite, spriteSize, drawText, textWidth } from "./sprites.js";
 import { sfx } from "./sfx.js";
 import { gunStats } from "./guns.js";
@@ -440,7 +441,7 @@ export class Game {
     ctx.imageSmoothingEnabled = false;
     ctx.save();
     if (this.shake > 0.05) ctx.translate(Math.round((Math.random() - 0.5) * 3 * this.shake), Math.round((Math.random() - 0.5) * 3 * this.shake));
-    drawScene(ctx, this.animT, { dusk: Math.min(0.5, (this.level - 1) * 0.05) });
+    drawBackdropGame(ctx, this.animT, { dusk: Math.min(0.5, (this.level - 1) * 0.05) });
     const t = this.t;
     const nowMs = performance.now();
 
