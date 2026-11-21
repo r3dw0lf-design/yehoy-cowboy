@@ -49,7 +49,7 @@ let birdSeq = 0;
 function makeBird(rng, level, spawnT) {
   const type = pickType(rng, level);
   const spec = BIRD_TYPES[type];
-  const { w, h } = spriteSize(type);
+  const { w, h, hx, hy, hw, hh } = spriteSize(type);
   const lerp = (r) => r[0] + (r[1] - r[0]) * rng();
   const speed = lerp(spec.speed) * Math.min(2.2, 1 + 0.07 * (level - 1));
   const amp = lerp(spec.amp);
@@ -69,6 +69,7 @@ function makeBird(rng, level, spawnT) {
     maxHp: spec.hp,
     w,
     h,
+    hx, hy, hw, hh, // hit box inside the sprite (unflipped)
     flashUntil: 0,
   };
 }
@@ -311,7 +312,8 @@ export class Game {
     for (let i = this.birds.length - 1; i >= 0; i--) {
       const b = this.birds[i];
       const p = birdPos(b, t);
-      if (px >= p.x - pad && px <= p.x + b.w + pad && py >= p.y - pad && py <= p.y + b.h + pad) {
+      const bx = p.x + (b.dir > 0 ? b.hx : b.w - b.hx - b.hw), by = p.y + b.hy; // sprite is mirrored when flying left
+      if (px >= bx - pad && px <= bx + b.hw + pad && py >= by - pad && py <= by + b.hh + pad) {
         targets.push({ b, p });
         if (!gs.multi) break;
       }
@@ -449,8 +451,16 @@ export class Game {
       const spec = BIRD_TYPES[b.type];
       const p = birdPos(b, t);
       const frame = Math.floor((t - b.spawnT) * spec.flap) % 4;
-      const spr = getSprite(b.type, Math.abs(frame), nowMs < b.flashUntil);
+      const gold = !!spec.sparkle;
+      // golden bird: a diagonal glint sweeps over it every ~1.6s
+      let shine = -1;
+      if (gold) {
+        const ph = (this.animT * 0.62 + b.id * 0.37) % 1;
+        if (ph < 0.55) shine = Math.round(-6 + (ph / 0.55) * (b.w + b.h * 0.55 + 12));
+      }
+      const spr = getSprite(b.type, Math.abs(frame), nowMs < b.flashUntil, shine);
       const x = Math.round(p.x), y = Math.round(p.y);
+      if (gold) this.drawGoldAura(ctx, b, x, y);
       if (b.dir > 0) ctx.drawImage(spr, x, y);
       else {
         ctx.save();
@@ -460,15 +470,13 @@ export class Game {
         ctx.restore();
       }
       if (b.maxHp > 1) {
+        const hx0 = x + (b.dir > 0 ? b.hx : b.w - b.hx - b.hw), hy0 = y + b.hy - 6;
         ctx.fillStyle = "#150a05";
-        ctx.fillRect(x + 2, y - 5, b.w - 2, 4);
+        ctx.fillRect(hx0, hy0, b.hw, 4);
         ctx.fillStyle = "#ff5a4a";
-        ctx.fillRect(x + 3, y - 4, Math.round(((b.w - 4) * b.hp) / b.maxHp), 2);
+        ctx.fillRect(hx0 + 1, hy0 + 1, Math.round(((b.hw - 2) * b.hp) / b.maxHp), 2);
       }
-      if (spec.sparkle && Math.sin(this.animT * 12 + b.id) > 0.85) {
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(x + Math.floor(Math.random() * b.w), y + Math.floor(Math.random() * b.h), 1, 1);
-      }
+      if (gold) this.drawGoldSparkles(ctx, b, x, y);
     }
 
     for (const f of this.falling) {
@@ -490,6 +498,44 @@ export class Game {
     this.drawRifle(ctx);
     ctx.restore();
     this.drawCrosshair(ctx);
+  }
+
+  // soft pulsing golden halo behind the Golden Eagle (drawn as stacked translucent ellipses = pixel-friendly)
+  drawGoldAura(ctx, b, x, y) {
+    const cx = x + b.hx + b.hw / 2, cy = y + b.hy + b.hh / 2;
+    const pulse = 0.5 + 0.5 * Math.sin(this.animT * 5 + b.id);
+    ctx.save();
+    for (let i = 3; i >= 1; i--) {
+      ctx.globalAlpha = (0.04 + 0.025 * pulse) * (4 - i);
+      ctx.fillStyle = i === 1 ? "#fff0a8" : "#ffc933";
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, b.hw * 0.5 + i * 4 + pulse * 1.5, b.hh * 0.5 + i * 3.5 + pulse, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // twinkling four-point stars around the Golden Eagle
+  drawGoldSparkles(ctx, b, x, y) {
+    for (let i = 0; i < 4; i++) {
+      const ph = (this.animT * 1.7 + i * 0.27 + b.id * 0.13) % 1;
+      if (ph > 0.38) continue;
+      const k = Math.sin((ph / 0.38) * Math.PI); // 0 -> 1 -> 0
+      const sx = x + b.hx + Math.floor(((Math.sin(b.id * 12.9 + i * 78.2) * 0.5 + 0.5) * b.hw));
+      const sy = y + b.hy - 4 + Math.floor(((Math.sin(b.id * 7.7 + i * 31.1) * 0.5 + 0.5) * (b.hh + 8)));
+      ctx.fillStyle = "#fff8d0";
+      ctx.fillRect(sx, sy, 1, 1);
+      if (k > 0.45) {
+        ctx.fillStyle = "#ffe27a";
+        ctx.fillRect(sx - 1, sy, 1, 1); ctx.fillRect(sx + 1, sy, 1, 1);
+        ctx.fillRect(sx, sy - 1, 1, 1); ctx.fillRect(sx, sy + 1, 1, 1);
+      }
+      if (k > 0.85) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(sx - 2, sy, 1, 1); ctx.fillRect(sx + 2, sy, 1, 1);
+        ctx.fillRect(sx, sy - 2, 1, 1); ctx.fillRect(sx, sy + 2, 1, 1);
+      }
+    }
   }
 
   drawRifle(ctx) {
